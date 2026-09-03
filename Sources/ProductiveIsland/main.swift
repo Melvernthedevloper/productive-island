@@ -79,7 +79,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let calendar = CalendarFeed()
 
     func applicationDidFinishLaunching(_ n: Notification) {
-        guard let screen = NSScreen.main else { return }
+        // The screen with a real notch, else the primary display — never "whichever has focus".
+        guard let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.screens.first else { return }
         let chat = ClaudeAppFeed(state: claude)
         self.chat = chat
         let p = IslandPanel(notch: Notch(screen: screen), claude: claude, spotify: spotify, calendar: calendar, chat: chat)
