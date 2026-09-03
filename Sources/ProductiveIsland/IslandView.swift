@@ -7,7 +7,7 @@ enum IslandMetrics {
     static var scale: CGFloat { [0.86, 1.0, 1.15][Prefs.size] }
     static var lobe: CGFloat { [150, 175, 205][Prefs.size] }
     static var panelHeight: CGFloat { 108 * scale }      // grows down only — width stays the compact width
-    static var settingsHeight: CGFloat { 168 * scale }
+    static var settingsHeight: CGFloat { 150 * scale }
     static let rowHeight: CGFloat = 22
     static let usageHeight: CGFloat = 16
     static let usageDetailHeight: CGFloat = 36
