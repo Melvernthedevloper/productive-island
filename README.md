@@ -19,11 +19,14 @@ Native SwiftUI, ~30 MB, no accounts, no network calls except Spotify artwork. Ev
 ## Install
 
 ```sh
-git clone https://github.com/<you>/productive-island.git
+git clone https://github.com/Melvernthedevloper/productive-island.git
 cd productive-island
-./make-app.sh            # builds ProductiveIsland.app
+./make-app.sh --make-cert   # once: a local signing identity so macOS permissions survive rebuilds
+./make-app.sh               # builds ProductiveIsland.app (with the pixel-worker icon)
 open ProductiveIsland.app
 ```
+
+The first launch walks you through the island and ends with a setup checklist (hooks, Calendar, Accessibility). Replay it any time from Settings.
 
 Then tell Claude Code to talk to it (once):
 
@@ -42,6 +45,10 @@ This appends hook entries to `~/.claude/settings.json`. It never removes anythin
 | Accessibility | see the Claude app's "Stop response" button | chat in the Claude app |
 
 Decline any of them and that one feature stays off; the rest keeps working. Accessibility is read-only — the app looks for one button label in the Claude window and never sends input.
+
+### Settings
+
+⚙ in the tab strip, or right-click the island. Open at login, sounds, how long the island lingers after the cursor leaves, hover delay, Claude colour (terracotta / follow album art / custom), reduce animation, hide the pixel worker, compact width for 13-inch screens, per-source on/off with permission status and one-click fixes, calendar scope, replay tutorial.
 
 ### Optional
 
@@ -76,6 +83,27 @@ Decline any of them and that one feature stays off; the rest keeps working. Acce
 | Calendar | EventKit |
 
 Five Swift files plus the sprite. Start with `PLAN.md` for the design.
+
+## Connect another AI (Codex, Gemini, anything)
+
+The island doesn't care who's working. Any tool that can run a command can post its state:
+
+```sh
+PI=/Applications/ProductiveIsland.app/Contents/MacOS/ProductiveIsland   # or wherever you keep it
+$PI emit --source codex --session $ID --name my-repo --start
+$PI emit --source codex --session $ID --tool Edit "src/app.ts"
+$PI emit --source codex --session $ID --done "Refactored the router."
+$PI emit --source codex --session $ID --ask "rm -rf dist/"     # blocks, prints {"behavior":"allow"|"deny"}
+$PI emit --source codex --session $ID --end
+```
+
+`--source` is the label shown in the island (`codex · my-repo`). Exits 0 and stays silent when the island isn't running, so it's safe in hooks.
+
+**Codex CLI** (untested — I don't use it; PRs welcome): in `~/.codex/config.toml`
+```toml
+notify = ["sh", "-c", "/path/to/ProductiveIsland emit --source codex --session codex --name \"$PWD\" --done \"turn finished\""]
+```
+Gemini CLI, Cursor, Antigravity and friends can plug in the same way wherever they expose a hook or notify command. Adapters that read a tool's own logs live in `Sources/ProductiveIsland/` as one file each — see `ClaudeDesktopFeed.swift` for the shape.
 
 ## Develop
 
