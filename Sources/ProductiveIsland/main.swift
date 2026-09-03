@@ -74,6 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var feed: ClaudeFeed?
     var desktop: ClaudeDesktopFeed?
     var chat: ClaudeAppFeed?
+    var statusItem: NSStatusItem?
     let claude = ClaudeState()
     let spotify = SpotifyFeed()
     let calendar = CalendarFeed()
@@ -93,7 +94,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         desktop = ClaudeDesktopFeed(state: claude)
         if ProcessInfo.processInfo.environment["PI_OPEN_SETTINGS"] != nil { SettingsWindow.shared.show() }   // for screenshots/tests
         SettingsWindow.shared.onReplayTutorial = { NotificationCenter.default.post(name: .replayTutorial, object: nil) }
+        installStatusItem()
     }
+}
+
+extension AppDelegate {
+    /// Menu bar icon: the one place to hide the island or quit. The icon is the pixel worker, template-tinted.
+    func installStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        if let b = item.button {
+            let r = ImageRenderer(content: Sprite.still("idle", 0).frame(width: 18, height: 18)); r.scale = 2
+            if let img = r.nsImage { img.isTemplate = true; img.size = NSSize(width: 18, height: 18); b.image = img }
+            b.toolTip = "Productive Island"
+        }
+        let menu = NSMenu()
+        menu.addItem(withTitle: "Hide island", action: #selector(toggleIsland), keyEquivalent: "h").target = self
+        menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Quit Productive Island", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        item.menu = menu
+        statusItem = item
+    }
+    @objc func toggleIsland(_ sender: NSMenuItem) {
+        guard let panel else { return }
+        if panel.isVisible { panel.orderOut(nil); sender.title = "Show island" } else { panel.orderFrontRegardless(); sender.title = "Hide island" }
+    }
+    @objc func openSettings() { SettingsWindow.shared.show() }
 }
 
 let app = NSApplication.shared

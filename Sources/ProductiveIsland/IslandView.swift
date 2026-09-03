@@ -74,7 +74,7 @@ struct IslandView: View {
     private var card: ClaudeState.Session? { claude.waiting }
     private var expanded: Bool { hovering || pinned || showFull != nil || card != nil || tutorial != nil || showSettings }
     /// Fit-notch collapses the wings when there's nothing to say.
-    private var idle: Bool { claude.sessions.isEmpty && !(srcSpotify && spotify.state.playing) && soonEvent == nil }
+    private var idle: Bool { !claude.sessions.contains { $0.urgency < 3 } && !(srcSpotify && spotify.state.playing) && soonEvent == nil }
     private var lobe: CGFloat { Prefs.size == 3 && idle && !expanded ? 0 : IslandMetrics.lobe }
     private var width: CGFloat { notch.width + 2 * lobe }
     private var height: CGFloat {
