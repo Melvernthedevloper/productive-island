@@ -2,6 +2,16 @@
 # Builds ProductiveIsland.app — a bundle is required for Calendar / Automation permission prompts.
 set -e
 cd "$(dirname "$0")"
+if [ "$1" = "--make-cert" ]; then
+  T=$(mktemp -d)
+  openssl req -x509 -newkey rsa:2048 -keyout "$T/k.pem" -out "$T/c.pem" -days 3650 -nodes -subj "/CN=ProductiveIsland Dev" \
+    -addext "extendedKeyUsage=codeSigning" -addext "keyUsage=digitalSignature" 2>/dev/null
+  openssl pkcs12 -export -inkey "$T/k.pem" -in "$T/c.pem" -out "$T/p.p12" -passout pass:pi -legacy 2>/dev/null || \
+  openssl pkcs12 -export -inkey "$T/k.pem" -in "$T/c.pem" -out "$T/p.p12" -passout pass:pi
+  security import "$T/p.p12" -k ~/Library/Keychains/login.keychain-db -P pi -T /usr/bin/codesign
+  security add-trusted-cert -r trustRoot -p codeSign -k ~/Library/Keychains/login.keychain-db "$T/c.pem"
+  rm -rf "$T"; echo "certificate 'ProductiveIsland Dev' installed"; exit 0
+fi
 swift build -c release
 APP=ProductiveIsland.app
 rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS"
@@ -27,5 +37,12 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>NSAppleEventsUsageDescription</key><string>Controls Spotify playback.</string>
 </dict></plist>
 PLIST
-codesign --force --sign - "$APP" >/dev/null 2>&1 || true
+# Sign with a stable local identity when one exists, so macOS permissions survive rebuilds.
+# Create it once with: ./make-app.sh --make-cert
+if security find-identity -v -p codesigning 2>/dev/null | grep -q "ProductiveIsland Dev"; then
+  codesign --force --sign "ProductiveIsland Dev" "$APP" >/dev/null 2>&1
+else
+  codesign --force --sign - "$APP" >/dev/null 2>&1 || true
+  echo "note: ad-hoc signed — permissions reset on every rebuild. Run ./make-app.sh --make-cert once to fix."
+fi
 echo "built $APP — open it with: open $APP"
