@@ -9,6 +9,10 @@ if let i = CommandLine.arguments.firstIndex(of: "--icon"), i + 1 < CommandLine.a
     MainActor.assumeIsolated { SpriteSheet.renderIcon(to: CommandLine.arguments[i + 1]) }
     exit(0)
 }
+if CommandLine.arguments.count > 1, CommandLine.arguments[1] == "emit" {
+    ClaudeFeed.emit(Array(CommandLine.arguments.dropFirst(2)))
+    exit(0)
+}
 if CommandLine.arguments.contains("--install-hooks") {
     try ClaudeFeed.installHooks()
     exit(0)
@@ -87,6 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         desktop = ClaudeDesktopFeed(state: claude)
         if ProcessInfo.processInfo.environment["PI_OPEN_SETTINGS"] != nil { SettingsWindow.shared.show() }   // for screenshots/tests
+        SettingsWindow.shared.onReplayTutorial = { NotificationCenter.default.post(name: .replayTutorial, object: nil) }
     }
 }
 
@@ -95,3 +100,5 @@ let delegate = MainActor.assumeIsolated { AppDelegate() }
 app.delegate = delegate
 app.setActivationPolicy(.accessory)
 app.run()
+
+extension Notification.Name { static let replayTutorial = Notification.Name("replayTutorial") }

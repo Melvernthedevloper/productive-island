@@ -139,6 +139,6 @@ struct SettingsView: View {
     }
 
     static func hooksPresent() -> Bool {
-        (try? String(contentsOfFile: NSHomeDirectory() + "/.claude/settings.json", encoding: .utf8))?.contains("ProductiveIsland/sock") ?? false
+        ((try? String(contentsOfFile: NSHomeDirectory() + "/.claude/settings.json", encoding: .utf8)) ?? "").replacingOccurrences(of: "\\/", with: "/").contains("ProductiveIsland/sock")
     }
 }

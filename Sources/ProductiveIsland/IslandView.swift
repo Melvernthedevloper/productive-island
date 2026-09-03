@@ -50,6 +50,7 @@ struct IslandView: View {
     @State private var chimed: Set<String> = []  // session ids already chimed for this done
     @State private var keyMonitor: Any?
     @State private var showUsage = false
+    @State private var tutorial: Int? = nil        // current tutorial step, nil = not running
     @AppStorage("soundOn") private var soundOn = true
     @AppStorage("calendarScope") private var scope: Scope = .today
     @AppStorage("showWorker") private var showWorker = true
@@ -60,10 +61,11 @@ struct IslandView: View {
     @AppStorage("src.calendar") private var srcCalendar = true
 
     private var card: ClaudeState.Session? { claude.waiting }
-    private var expanded: Bool { hovering || pinned || showFull != nil || card != nil }
+    private var expanded: Bool { hovering || pinned || showFull != nil || card != nil || tutorial != nil }
     private var width: CGFloat { notch.width + 2 * IslandMetrics.lobe }
     private var height: CGFloat {
         if !expanded { return notch.height }
+        if tutorial != nil { return Tutorial.height }
         if card != nil { return IslandMetrics.cardHeight }
         if showFull != nil { return IslandMetrics.fullHeight }
         switch tab {
@@ -122,7 +124,11 @@ struct IslandView: View {
         .onChange(of: tab) { _, _ in showUsage = false }
         .onChange(of: calendar.minutesToNext()) { _, m in if let m, m == 5 { open(.calendar, for: .seconds(8)) } }
         .onChange(of: spotify.state.name) { _, _ in if expanded && card == nil { tab = .music } }
-        .onAppear(perform: installSwipe)
+        .onAppear {
+            installSwipe()
+            if !Prefs.hasSeenTutorial { Task { try? await Task.sleep(for: .seconds(1)); tutorial = 0 } }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .replayTutorial)) { _ in tutorial = 0 }
         // ponytail: SwiftUI's onHover misses the exit while the frame is animating, so poll the cursor while open.
         // The island lingers `linger` seconds after the cursor leaves; coming back inside cancels the close.
         .task(id: expanded) {
@@ -264,7 +270,9 @@ struct IslandView: View {
     // MARK: - expanded panel
 
     @ViewBuilder private var panel: some View {
-        if let c = card {
+        if let step = tutorial {
+            Tutorial(step: step, notchHeight: notch.height, spotify: spotify, next: { tutorial = $0 }, finish: { tutorial = nil; Prefs.hasSeenTutorial = true })
+        } else if let c = card {
             permissionCard(c)
         } else {
             VStack(spacing: 0) {
@@ -393,7 +401,7 @@ struct IslandView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Palette.well, in: RoundedRectangle(cornerRadius: 8))
                     .textSelection(.enabled)
-                Text("\(tool) · \(s.source == .cowork ? "cowork" : s.name)").font(.system(size: 10, design: .monospaced)).foregroundStyle(Palette.dim)
+                Text("\(tool) · \(label(s))").font(.system(size: 10, design: .monospaced)).foregroundStyle(Palette.dim)
             }
             Spacer(minLength: 0)
             HStack(spacing: 10) {
@@ -541,7 +549,7 @@ struct IslandView: View {
     }
 
     private func label(_ s: ClaudeState.Session) -> String {
-        switch s.source { case .cowork: "cowork · \(s.name)"; case .chat: "chat · \(s.name)"; case .code: s.name }
+        switch s.source { case .cowork: "cowork · \(s.name)"; case .chat: "chat · \(s.name)"; case .code: s.name; case .other(let n): "\(n) · \(s.name)" }
     }
 
     // MARK: calendar
@@ -650,6 +658,7 @@ struct IslandView: View {
     /// Bring the session's app to the front: the Claude app for Cowork, your terminal for Claude Code.
     private func focus(_ s: ClaudeState.Session) {
         // ponytail: first running app from this list wins; add yours if it's missing.
+        if case .other = s.source { return }      // ponytail: unknown app; add a bundle id per source when needed
         let ids = s.source != .code ? ["com.anthropic.claudefordesktop"] : [
             "com.googlecode.iterm2", "com.mitchellh.ghostty", "dev.warp.Warp-Stable", "net.kovidgoyal.kitty",
             "com.apple.Terminal", "com.microsoft.VSCode", "com.todesktop.230313mzl4w4u92" /* Cursor */]

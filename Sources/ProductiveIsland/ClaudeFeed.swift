@@ -9,7 +9,7 @@ final class ClaudeState {
         case done(String)
         case permission(tool: String, detail: String)
     }
-    enum Source { case code, cowork, chat }
+    enum Source: Equatable { case code, cowork, chat, other(String) }
 
     struct Session: Identifiable {
         let id: String
@@ -90,22 +90,24 @@ final class ClaudeState {
             }
             return
         }
-        let name = ((e["cwd"] as? String ?? "") as NSString).lastPathComponent
+        let src: Source = (e["source"] as? String).map { .other($0) } ?? .code
+        if src == .code, !Prefs.source("code") { return }
+        let name = (e["name"] as? String) ?? ((e["cwd"] as? String ?? "") as NSString).lastPathComponent
         switch e["hook_event_name"] as? String ?? "" {
         case "SessionStart", "UserPromptSubmit", "PostToolUse":
-            upsert(id, source: .code, name: name) { $0.phase = .working(tool: "thinking", target: "") }
+            upsert(id, source: src, name: name) { $0.phase = .working(tool: "thinking", target: "") }
         case "PreToolUse":
             let input = e["tool_input"] as? [String: Any] ?? [:]
-            upsert(id, source: .code, name: name) { $0.phase = .working(tool: e["tool_name"] as? String ?? "tool", target: ClaudeState.target(input)) }
+            upsert(id, source: src, name: name) { $0.phase = .working(tool: e["tool_name"] as? String ?? "tool", target: ClaudeState.target(input)) }
         case "PermissionRequest":
             let input = e["tool_input"] as? [String: Any] ?? [:]
-            upsert(id, source: .code, name: name) {
+            upsert(id, source: src, name: name) {
                 $0.phase = .permission(tool: e["tool_name"] as? String ?? "tool", detail: ClaudeState.detail(input))
                 $0.decide = decide
             }
         case "Stop":
-            let text = ClaudeState.lastAssistantText(e["transcript_path"] as? String)
-            upsert(id, source: .code, name: name) { $0.phase = .done(text) }
+            let text = (e["text"] as? String) ?? ClaudeState.lastAssistantText(e["transcript_path"] as? String)
+            upsert(id, source: src, name: name) { $0.phase = .done(text) }
         case "SessionEnd":
             remove(id)
         default: break
@@ -250,6 +252,40 @@ final class ClaudeFeed: @unchecked Sendable {
     }
 
     /// Append our hooks to ~/.claude/settings.json. Idempotent.
+    /// `emit` subcommand: lets any tool post an event. Prints nothing; exits 0 even if the island is off.
+    static func emit(_ args: [String]) {
+        var e: [String: Any] = ["source": "other", "session_id": "other"]
+        var i = 0
+        func next() -> String? { i += 1; return i < args.count ? args[i] : nil }
+        while i < args.count {
+            switch args[i] {
+            case "--source": e["source"] = next() ?? "other"
+            case "--session": e["session_id"] = next() ?? "other"
+            case "--name": e["name"] = next() ?? ""
+            case "--start": e["hook_event_name"] = "UserPromptSubmit"
+            case "--tool": e["hook_event_name"] = "PreToolUse"; e["tool_name"] = next() ?? "tool"
+                if i + 1 < args.count, !args[i + 1].hasPrefix("--") { e["tool_input"] = ["command": next()!] }
+            case "--done": e["hook_event_name"] = "Stop"; e["text"] = next() ?? "Done"
+            case "--ask": e["hook_event_name"] = "PermissionRequest"; e["tool_name"] = "request"; e["tool_input"] = ["command": next() ?? ""]
+            case "--end": e["hook_event_name"] = "SessionEnd"
+            default: break
+            }
+            i += 1
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: e) else { return }
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0); defer { close(fd) }
+        var addr = sockaddr_un(); addr.sun_family = sa_family_t(AF_UNIX)
+        withUnsafeMutablePointer(to: &addr.sun_path) { $0.withMemoryRebound(to: CChar.self, capacity: 104) { _ = strlcpy($0, socketPath, 104) } }
+        let len = socklen_t(MemoryLayout<sockaddr_un>.size)
+        guard withUnsafePointer(to: &addr, { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, len) } }) == 0 else { return }
+        _ = data.withUnsafeBytes { send(fd, $0.baseAddress, data.count, 0) }
+        if e["hook_event_name"] as? String == "PermissionRequest" {          // wait for the island's answer and print it
+            var buf = [UInt8](repeating: 0, count: 4096)
+            let n = recv(fd, &buf, buf.count, 0)
+            if n > 0 { FileHandle.standardOutput.write(Data(buf[0..<n])) }
+        }
+    }
+
     static func installHooks() throws {
         let url = URL(fileURLWithPath: NSHomeDirectory() + "/.claude/settings.json")
         var root = (try? JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]) ?? [:]
@@ -266,7 +302,7 @@ final class ClaudeFeed: @unchecked Sendable {
         for ev in ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SessionEnd"] { add(ev, fire, timeout: 2) }
         add("PermissionRequest", wait, timeout: 65)
         root["hooks"] = hooks
-        try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys]).write(to: url)
+        try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]).write(to: url)
         print("hooks installed → \(url.path)")
     }
 }

@@ -10,7 +10,10 @@ if [ "$1" = "--make-cert" ]; then
   openssl pkcs12 -export -inkey "$T/k.pem" -in "$T/c.pem" -out "$T/p.p12" -passout pass:pi
   security import "$T/p.p12" -k ~/Library/Keychains/login.keychain-db -P pi -T /usr/bin/codesign
   security add-trusted-cert -r trustRoot -p codeSign -k ~/Library/Keychains/login.keychain-db "$T/c.pem"
-  rm -rf "$T"; echo "certificate 'ProductiveIsland Dev' installed"; exit 0
+  rm -rf "$T"
+  echo "certificate 'ProductiveIsland Dev' installed."
+  echo "The first build will show a keychain prompt for codesign — click 'Always Allow' once."
+  exit 0
 fi
 swift build -c release
 APP=ProductiveIsland.app
