@@ -14,7 +14,8 @@ enum IslandMetrics {
     static var weekHeight: CGFloat { 150 * scale }
     static var cardHeight: CGFloat { 170 * scale }
     static var fullHeight: CGFloat { 260 * scale }
-    static let corner: CGFloat = 18
+    static var corner: CGFloat { Prefs.radius }
+    static var drop: CGFloat { Prefs.detached ? 6 : 0 }     // floating pill sits a little below the bezel
     static var hoverDelay: Duration { .milliseconds(Int(Prefs.hoverDelay * 1000)) }
     static var linger: TimeInterval { Prefs.linger }          // stays open this long after the cursor leaves
 
@@ -112,13 +113,14 @@ struct IslandView: View {
     var body: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
-                IslandShape(radius: IslandMetrics.corner).fill(.black)
+                IslandSurface(radius: IslandMetrics.corner, detached: Prefs.detached, glass: Prefs.glass, border: Prefs.border, compact: !expanded)
                 if card != nil {
-                    IslandShape(radius: IslandMetrics.corner).strokeBorder(Palette.attention.opacity(0.9), lineWidth: 1.5)
+                    IslandShape(radius: IslandMetrics.corner, detached: Prefs.detached).strokeBorder(Palette.attention.opacity(0.9), lineWidth: 1.5)
                 }
                 if expanded { panel } else { compact }
             }
             .frame(width: width, height: height)
+            .offset(y: IslandMetrics.drop)
             .animation(.spring(response: 0.45, dampingFraction: 0.78), value: height)
             .animation(.spring(response: 0.45, dampingFraction: 0.78), value: size)
             .onHover(perform: hover)
@@ -238,7 +240,7 @@ struct IslandView: View {
     private var compact: some View {
         HStack(spacing: 0) {
             leftLobe.frame(width: IslandMetrics.lobe)
-            Bars(levels: levels, color: accent).frame(width: notch.width)
+            Group { if Prefs.showBars { Bars(levels: levels, color: accent) } else { Color.clear } }.frame(width: notch.width)
             claudeLobe.frame(width: IslandMetrics.lobe)
         }
         .frame(height: notch.height)
@@ -249,7 +251,7 @@ struct IslandView: View {
         if let e = soonEvent {
             HStack(spacing: 8) {
                 Image(systemName: "calendar").font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.attention)
-                Text(e.title ?? "Event").lineLimit(1).font(.system(size: 12, weight: .semibold, design: .rounded))
+                Text(e.title ?? "Event").lineLimit(1).font(.system(size: 12, weight: .semibold, design: Prefs.titleDesign))
                 Spacer(minLength: 0)
                 Text("\(max(0, calendar.minutesToNext() ?? 0))m").font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(Palette.attention)
             }
@@ -258,8 +260,8 @@ struct IslandView: View {
             HStack(spacing: 8) {
                 Record(image: spotify.state.artwork, playing: srcSpotify && spotify.state.playing, size: 18 * IslandMetrics.scale)
                 if srcSpotify, spotify.state.hasTrack {
-                    Text(spotify.state.name).lineLimit(1).truncationMode(.tail)
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    Text(spotify.state.name.themed).lineLimit(1).truncationMode(.tail)
+                        .font(.system(size: 12, weight: .semibold, design: Prefs.titleDesign))
                         .foregroundStyle(spotify.state.playing ? .white : Palette.dim)
                 }
                 Spacer(minLength: 0)
@@ -276,16 +278,16 @@ struct IslandView: View {
                 switch p.phase {
                 case .working(let tool, let target):
                     TimelineView(.periodic(from: p.since, by: 4)) { _ in
-                        Text(ClaudeState.phrase(tool: tool, target: target, since: p.since)).lineLimit(1).truncationMode(.tail)
+                        Text(ClaudeState.phrase(tool: tool, target: target, since: p.since).themed).lineLimit(1).truncationMode(.tail)
                     }
                     Elapsed(since: p.since).foregroundStyle(Palette.dim).fixedSize()
                 case .done:
-                    Text("done · \(p.name)").lineLimit(1).truncationMode(.tail)
+                    Text("done · \(p.name)".themed).lineLimit(1).truncationMode(.tail)
                 case .permission:
                     Text("needs you · \(p.name)").lineLimit(1).truncationMode(.tail).foregroundStyle(Palette.attention)
                 }
             } else {
-                Text("idle").foregroundStyle(Palette.dim)
+                Text("idle".themed).foregroundStyle(Palette.dim)
             }
             if claude.sessions.count > 1 { Text("+\(claude.sessions.count - 1)").foregroundStyle(Palette.dim).fixedSize() }
             stateGlyph(claude.primary?.phase, 18 * IslandMetrics.scale)
@@ -447,7 +449,7 @@ struct IslandView: View {
     private var quickSettings: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Settings").font(.system(size: 13, weight: .semibold, design: .rounded))
+                Text("Settings").font(.system(size: 13, weight: .semibold, design: Prefs.titleDesign))
                 Spacer()
                 Button("All settings…") { showSettings = false; SettingsWindow.shared.show() }
                     .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(Palette.attention)
@@ -492,7 +494,7 @@ struct IslandView: View {
     private func permissionCard(_ s: ClaudeState.Session) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             if case .permission(let tool, let detail) = s.phase {
-                Text("\(s.name) wants to run").font(.system(size: 15, weight: .semibold, design: .rounded)).foregroundStyle(Palette.attention)
+                Text("\(s.name) wants to run").font(.system(size: 15, weight: .semibold, design: Prefs.titleDesign)).foregroundStyle(Palette.attention)
                 Text(detail.isEmpty ? tool : detail)
                     .font(.system(size: 12, weight: .medium, design: .monospaced)).lineLimit(2)
                     .padding(.horizontal, 10).padding(.vertical, 6)
@@ -504,7 +506,7 @@ struct IslandView: View {
             Spacer(minLength: 0)
             HStack(spacing: 10) {
                 Spacer()
-                if s.source == .cowork {
+                if s.decide == nil {
                     pill("Open Claude", key: nil, fill: Palette.attention, ink: .black) { focus(s) }
                 } else {
                     pill("Deny", key: "⎋", fill: Color(white: 0.17), ink: .white) { claude.decide(s.id, allow: false) }
@@ -537,7 +539,7 @@ struct IslandView: View {
             Record(image: spotify.state.artwork, playing: spotify.state.playing, size: 52)
             VStack(alignment: .leading, spacing: 3) {
                 Text(spotify.state.hasTrack ? spotify.state.name : "Nothing playing")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded)).lineLimit(1)
+                    .font(.system(size: 13, weight: .semibold, design: Prefs.titleDesign)).lineLimit(1)
                 Text(spotify.state.hasTrack ? spotify.state.artist : "Press play in Spotify")
                     .font(.system(size: 11)).foregroundStyle(Palette.dim).lineLimit(1)
                 if spotify.state.hasTrack { progress.padding(.top, 2) }
@@ -586,7 +588,7 @@ struct IslandView: View {
         if let f = showFull, let s = claude.sessions.first(where: { $0.id == f }), case .done(let text) = s.phase {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text(s.name).font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundStyle(Palette.ok)
+                    Text(s.name).font(.system(size: 13, weight: .semibold, design: Prefs.titleDesign)).foregroundStyle(Palette.ok)
                     Spacer()
                     IconButton("chevron.up", size: 12, hit: 28) { showFull = nil }
                     IconButton("arrow.up.right", size: 12, hit: 28) { focus(s) }
@@ -626,14 +628,14 @@ struct IslandView: View {
                 switch s.phase {
                 case .working(let tool, let target):
                     TimelineView(.periodic(from: s.since, by: 4)) { _ in
-                        (Text(label(s)).font(.system(size: 12, weight: .semibold, design: .rounded))
+                        (Text(label(s)).font(.system(size: 12, weight: .semibold, design: Prefs.titleDesign))
                          + Text("  \(ClaudeState.phrase(tool: tool, target: target, since: s.since))").font(.system(size: 11)).foregroundColor(Palette.dim))
                     }
                 case .done(let text):
-                    (Text(label(s)).font(.system(size: 12, weight: .semibold, design: .rounded)).foregroundColor(Palette.ok)
+                    (Text(label(s)).font(.system(size: 12, weight: .semibold, design: Prefs.titleDesign)).foregroundColor(Palette.ok)
                      + Text("  \(text.split(separator: "\n").first ?? "Done")").font(.system(size: 11)).foregroundColor(Palette.dim))
                 case .permission(let tool, _):
-                    (Text(label(s)).font(.system(size: 12, weight: .semibold, design: .rounded)).foregroundColor(Palette.attention)
+                    (Text(label(s)).font(.system(size: 12, weight: .semibold, design: Prefs.titleDesign)).foregroundColor(Palette.attention)
                      + Text("  \(tool)").font(.system(size: 11, design: .monospaced)).foregroundColor(Palette.dim))
                 }
             }
@@ -657,7 +659,7 @@ struct IslandView: View {
         let rows = agentSessions(t)
         return VStack(alignment: .leading, spacing: 0) {
             if rows.isEmpty {
-                Text("\(name.capitalized) isn't connected yet").font(.system(size: 13, weight: .semibold, design: .rounded))
+                Text("\(name.capitalized) isn't connected yet").font(.system(size: 13, weight: .semibold, design: Prefs.titleDesign))
                 Text("Have it run this when it starts, works, and finishes:").font(.system(size: 11)).foregroundStyle(Palette.dim).padding(.top, 2)
                 HStack(spacing: 8) {
                     Text("ProductiveIsland emit --source \(name) --done \"…\"")
@@ -684,7 +686,7 @@ struct IslandView: View {
     private var calendarTab: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
-                Text(scope == .week ? "This week" : scope.rawValue).font(.system(size: 12, weight: .semibold, design: .rounded))
+                Text(scope == .week ? "This week" : scope.rawValue).font(.system(size: 12, weight: .semibold, design: Prefs.titleDesign))
                 IconButton("arrow.up.right", size: 10, hit: 20) { openCalendar(nil) }.help("Open Calendar")
                 Spacer()
                 HStack(spacing: 2) {
@@ -699,13 +701,13 @@ struct IslandView: View {
                 .padding(2).background(Color(white: 0.11), in: RoundedRectangle(cornerRadius: 6))
             }
             if !calendar.authorized {
-                Text("Calendar access is off").font(.system(size: 13, weight: .semibold, design: .rounded))
+                Text("Calendar access is off").font(.system(size: 13, weight: .semibold, design: Prefs.titleDesign))
                 Text("Allow Productive Island in System Settings → Privacy → Calendars.").font(.system(size: 11)).foregroundStyle(Palette.dim)
             } else if scope == .week {
                 weekList
             } else if let n = scopedEvents.first {
                 HStack {
-                    Text(n.title ?? "Event").font(.system(size: 13, weight: .semibold, design: .rounded)).lineLimit(1)
+                    Text(n.title ?? "Event").font(.system(size: 13, weight: .semibold, design: Prefs.titleDesign)).lineLimit(1)
                     Spacer()
                     Text(relative(n)).font(.system(size: 11, design: .monospaced)).foregroundStyle(soonEvent == n ? Palette.attention : Palette.dim)
                     IconButton("arrow.up.right", size: 10, hit: 20) { openCalendar(n) }.help("Open in Calendar")
@@ -731,7 +733,7 @@ struct IslandView: View {
                         .font(.system(size: 10)).foregroundStyle(Palette.dim)
                 }
             } else {
-                Text(scope == .today ? "Nothing left today" : "Nothing tomorrow").font(.system(size: 13, weight: .semibold, design: .rounded))
+                Text(scope == .today ? "Nothing left today" : "Nothing tomorrow").font(.system(size: 13, weight: .semibold, design: Prefs.titleDesign))
                 if let t = (scope == .today ? calendar.tomorrow : calendar.week).first {
                     (Text("\(scope == .today ? "Tomorrow" : dayName(t.startDate)) starts with ").foregroundColor(Palette.dim) + Text(t.title ?? "an event") + Text(" at \(hhmm(t.startDate))").foregroundColor(Palette.dim))
                         .font(.system(size: 11))
@@ -797,7 +799,11 @@ extension IslandView {
     }
 }
 
-extension String { var nonEmpty: String? { isEmpty ? nil : self } }
+extension String {
+    var nonEmpty: String? { isEmpty ? nil : self }
+    /// Pill labels honour the uppercase theme knob.
+    var themed: String { Prefs.uppercase ? uppercased() : self }
+}
 
 struct IconButton: View {
     let symbol: String
@@ -826,14 +832,38 @@ struct Elapsed: View {
     }
 }
 
+/// Black or glass, flush or floating, with or without a hairline — the theme's surface.
+struct IslandSurface: View {
+    var radius: CGFloat; var detached: Bool; var glass: Bool; var border: Bool; var compact: Bool
+    var body: some View {
+        let shape = IslandShape(radius: radius, detached: detached)
+        ZStack {
+            if glass {
+                shape.fill(.ultraThinMaterial).environment(\.colorScheme, .dark)
+                shape.fill(.black.opacity(0.55))
+            } else {
+                shape.fill(.black)
+            }
+            if border { shape.strokeBorder(.white.opacity(0.18), lineWidth: 1) }
+        }
+        .shadow(color: .black.opacity(detached ? 0.45 : 0), radius: 10, y: 4)
+    }
+}
+
 /// Flush against the top bezel, rounded only at the bottom, with small outward curls at the top so it reads as the notch stretching.
+/// `detached`: a free capsule, rounded on all four corners, no curls.
 struct IslandShape: InsettableShape {
     var radius: CGFloat
+    var detached: Bool = false
     var inset: CGFloat = 0
     func inset(by amount: CGFloat) -> IslandShape { var s = self; s.inset += amount; return s }
     func path(in rect: CGRect) -> Path {
         let r = rect.insetBy(dx: inset, dy: inset)
-        let curl: CGFloat = 8
+        if detached {
+            return Path(roundedRect: r, cornerRadius: min(radius, r.height / 2), style: .continuous)
+        }
+        let curl: CGFloat = min(8, radius / 2)
+        let radius = min(radius, r.height / 2)
         var p = Path()
         p.move(to: CGPoint(x: r.minX - curl, y: r.minY))
         p.addQuadCurve(to: CGPoint(x: r.minX, y: r.minY + curl), control: CGPoint(x: r.minX, y: r.minY))

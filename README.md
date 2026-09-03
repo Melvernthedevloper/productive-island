@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon.png" width="128" alt="Productive Island icon"></p>
+
 # Productive Island
 
 A Dynamic Island for the MacBook notch that shows what Claude is doing — Claude Code in your terminal, Cowork tasks and chats in the Claude app — next to what you're listening to and what's next on your calendar.

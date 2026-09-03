@@ -12,6 +12,34 @@ enum Prefs {
     static var reduceAnimation: Bool { d.bool(forKey: "reduceAnimation") }
     static var showWorker: Bool { d.object(forKey: "showWorker") as? Bool ?? true }
     static var size: Int { d.object(forKey: "size") as? Int ?? 1 }        // 0 small · 1 medium · 2 large
+    // Theme knobs. Presets just set these; each stays editable.
+    static var radius: Double { d.object(forKey: "th.radius") as? Double ?? 18 }
+    static var detached: Bool { d.bool(forKey: "th.detached") }
+    static var textStyle: Int { d.integer(forKey: "th.text") }             // 0 rounded · 1 mono · 2 default
+    static var glass: Bool { d.bool(forKey: "th.glass") }
+    static var border: Bool { d.bool(forKey: "th.border") }
+    static var showBars: Bool { d.object(forKey: "th.bars") as? Bool ?? true }
+    static var thickBars: Bool { d.bool(forKey: "th.thickBars") }
+    static var uppercase: Bool { d.bool(forKey: "th.upper") }
+    static var titleDesign: Font.Design { [.rounded, .monospaced, .default][textStyle] }
+
+    struct Preset { let name: String; let radius: Double; let detached: Bool; let text: Int; let glass: Bool; let border: Bool; let thickBars: Bool; let upper: Bool; let worker: Bool }
+    static let presets: [Preset] = [
+        Preset(name: "Notch", radius: 18, detached: false, text: 0, glass: false, border: false, thickBars: false, upper: false, worker: true),
+        Preset(name: "Pill",  radius: 99, detached: true,  text: 0, glass: false, border: false, thickBars: false, upper: false, worker: true),
+        Preset(name: "Pixel", radius: 4,  detached: false, text: 1, glass: false, border: false, thickBars: true,  upper: true,  worker: true),
+        Preset(name: "Glass", radius: 22, detached: false, text: 2, glass: true,  border: true,  thickBars: false, upper: false, worker: true),
+        Preset(name: "Mono",  radius: 12, detached: false, text: 1, glass: false, border: false, thickBars: false, upper: false, worker: false),
+    ]
+    static func apply(_ p: Preset) {
+        d.set(p.radius, forKey: "th.radius"); d.set(p.detached, forKey: "th.detached"); d.set(p.text, forKey: "th.text")
+        d.set(p.glass, forKey: "th.glass"); d.set(p.border, forKey: "th.border"); d.set(p.thickBars, forKey: "th.thickBars")
+        d.set(p.upper, forKey: "th.upper"); d.set(p.worker, forKey: "showWorker")
+    }
+    /// Which preset matches the current knobs, if any.
+    static var currentPreset: String? {
+        presets.first { $0.radius == radius && $0.detached == detached && $0.text == textStyle && $0.glass == glass && $0.border == border && $0.thickBars == thickBars && $0.upper == uppercase && $0.worker == showWorker }?.name
+    }
     static var accentMode: Int { d.integer(forKey: "accentMode") }           // 0 terracotta · 1 album art · 2 custom
     static var accentHex: String { d.string(forKey: "accentHex") ?? "D97757" }
     static func source(_ k: String) -> Bool { d.object(forKey: "src.\(k)") as? Bool ?? true }
@@ -67,6 +95,15 @@ struct SettingsView: View {
     @AppStorage("reduceAnimation") private var reduceAnimation = false
     @AppStorage("showWorker") private var showWorker = true
     @AppStorage("size") private var size = 1
+    @AppStorage("th.radius") private var radius = 18.0
+    @AppStorage("th.detached") private var detached = false
+    @AppStorage("th.text") private var textStyle = 0
+    @AppStorage("th.glass") private var glass = false
+    @AppStorage("th.border") private var border = false
+    @AppStorage("th.bars") private var showBars = true
+    @AppStorage("th.thickBars") private var thickBars = false
+    @AppStorage("th.upper") private var uppercase = false
+    @State private var preset: String? = Prefs.currentPreset
     @AppStorage("accentMode") private var accentMode = 0
     @AppStorage("accentHex") private var accentHex = "D97757"
     @AppStorage("calendarScope") private var scope: Scope = .today
@@ -96,6 +133,24 @@ struct SettingsView: View {
                 }
             }
             Section("Appearance") {
+                PillPreview().frame(maxWidth: .infinity).frame(height: 96).listRowInsets(EdgeInsets())
+                HStack(spacing: 8) {
+                    ForEach(Prefs.presets, id: \.name) { p in
+                        Button(p.name) { Prefs.apply(p); reloadTheme() }
+                            .buttonStyle(.bordered)
+                            .tint(preset == p.name ? .accentColor : .secondary)
+                    }
+                }
+                Picker("Shape", selection: $detached) { Text("Part of the notch").tag(false); Text("Floating pill").tag(true) }
+                LabeledContent("Corner radius") {
+                    HStack { Slider(value: $radius, in: 4...40, step: 1).frame(width: 160); Text("\(Int(radius))").monospacedDigit().frame(width: 30, alignment: .trailing) }
+                }
+                Picker("Text", selection: $textStyle) { Text("Rounded").tag(0); Text("Mono").tag(1); Text("System").tag(2) }
+                Toggle("Uppercase labels", isOn: $uppercase)
+                Picker("Material", selection: $glass) { Text("Black").tag(false); Text("Glass").tag(true) }
+                Toggle("Hairline border", isOn: $border)
+                Toggle("Activity bars", isOn: $showBars)
+                Toggle("Thick bars", isOn: $thickBars).disabled(!showBars)
                 Picker("Claude colour", selection: $accentMode) {
                     Text("Terracotta").tag(0); Text("Follow album art").tag(1); Text("Custom").tag(2)
                 }
@@ -131,9 +186,17 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 460)
+        .onChange(of: [radius, Double(textStyle)] + [detached, glass, border, thickBars, uppercase, showWorker].map { $0 ? 1 : 0 }) { _, _ in preset = Prefs.currentPreset }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             accessibility = AXIsProcessTrusted(); hooksInstalled = SettingsView.hooksPresent()
         }
+    }
+
+    /// After a preset writes UserDefaults directly, pull the values back into the bound @AppStorage properties.
+    private func reloadTheme() {
+        radius = Prefs.radius; detached = Prefs.detached; textStyle = Prefs.textStyle; glass = Prefs.glass
+        border = Prefs.border; thickBars = Prefs.thickBars; uppercase = Prefs.uppercase; showWorker = Prefs.showWorker
+        preset = Prefs.currentPreset
     }
 
     private func sourceRow(_ name: String, _ on: Binding<Bool>, ok: Bool, fix: String?, action: @escaping () -> Void) -> some View {
@@ -195,5 +258,50 @@ struct TabsEditor: View {
 
     static func title(_ t: String) -> String {
         switch t { case "music": "Music"; case "claude": "Claude"; case "calendar": "Calendar"; default: String(t.dropFirst(6)).capitalized }
+    }
+}
+
+
+/// A compact pill drawn with the current theme, on a mock menu bar, so changes read instantly.
+struct PillPreview: View {
+    @AppStorage("th.radius") private var radius = 18.0
+    @AppStorage("th.detached") private var detached = false
+    @AppStorage("th.text") private var textStyle = 0
+    @AppStorage("th.glass") private var glass = false
+    @AppStorage("th.border") private var border = false
+    @AppStorage("th.bars") private var showBars = true
+    @AppStorage("th.thickBars") private var thickBars = false
+    @AppStorage("th.upper") private var uppercase = false
+    @AppStorage("showWorker") private var showWorker = true
+    @AppStorage("size") private var size = 1
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            LinearGradient(colors: [Color(red: 0.24, green: 0.47, blue: 0.72), Color(red: 0.18, green: 0.36, blue: 0.58)], startPoint: .top, endPoint: .bottom)
+            Rectangle().fill(Color(white: 0.12)).padding(.top, 32)
+            HStack { Text("Finder  File  Edit").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white); Spacer(); Text("Thu 3 Sep  15.35").font(.system(size: 12)).foregroundStyle(.white) }
+                .padding(.horizontal, 14).frame(height: 32)
+            Rectangle().fill(.black).frame(width: 120, height: 32).clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 12, bottomTrailingRadius: 12))
+            IslandSurface(radius: radius, detached: detached, glass: glass, border: border, compact: true)
+                .frame(width: 120 + 2 * [90, 105, 120][size], height: 32)
+                .overlay {
+                    HStack(spacing: 0) {
+                        HStack(spacing: 6) { Record(image: nil, playing: false, size: 16); label("Ivy") ; Spacer(minLength: 0) }.padding(.horizontal, 10).frame(width: [90, 105, 120][size])
+                        Group { if showBars { Bars(levels: [0.4, 0.9, 0.3, 0.7, 0.5], color: Palette.claude, thick: thickBars) } else { Color.clear } }.frame(width: 120)
+                        HStack(spacing: 6) { Spacer(minLength: 0); label("Editing app.ts", mono: true); if showWorker { Sprite(phase: .working(tool: "Edit", target: ""), size: 16) } else { Orb(phase: .working(tool: "Edit", target: ""), size: 9) } }.padding(.horizontal, 10).frame(width: [90, 105, 120][size])
+                    }
+                    .foregroundStyle(.white)
+                    .offset(y: detached ? 6 : 0)
+                }
+                .offset(y: detached ? 6 : 0)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 12).padding(.vertical, 8)
+    }
+
+    private func label(_ t: String, mono: Bool = false) -> some View {
+        Text(uppercase ? t.uppercased() : t)
+            .font(.system(size: mono ? 10 : 11, weight: .semibold, design: mono ? .monospaced : [.rounded, .monospaced, .default][textStyle]))
+            .lineLimit(1)
     }
 }

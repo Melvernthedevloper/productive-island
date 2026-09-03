@@ -145,6 +145,20 @@ final class ClaudeState {
         }
     }
 
+    /// The Claude app is showing Allow/Deny — surface it as a permission the island can answer by pressing the button.
+    func applyChatPermission(title: String, detail: String, decide: @escaping (Bool) -> Void) {
+        guard Prefs.source("chat") else { return }
+        upsert("chat", source: .chat, name: title) {
+            $0.phase = .permission(tool: "Claude app", detail: detail.isEmpty ? "wants permission" : detail)
+            $0.decide = decide
+        }
+    }
+    func clearChatPermission() {
+        guard let i = sessions.firstIndex(where: { $0.id == "chat" }), sessions[i].needsYou else { return }
+        sessions[i].decide = nil
+        sessions[i].phase = .working(tool: "thinking", target: "")
+    }
+
     // MARK: wording
 
     /// What to say while a tool runs — a verb people recognise, not the tool's internal name.

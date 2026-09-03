@@ -57,7 +57,7 @@ struct Tutorial: View {
 
     private func title(_ t: String, _ sub: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(t).font(.system(size: 14, weight: .semibold, design: .rounded))
+            Text(t).font(.system(size: 14, weight: .semibold, design: Prefs.titleDesign))
             Text(sub).font(.system(size: 11)).foregroundStyle(Palette.dim).fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -82,7 +82,7 @@ struct Tutorial: View {
             title("Claude at work", "Every Claude Code, Cowork or chat session gets a row. It chimes when a reply lands; ↗ jumps to that app.")
             HStack(spacing: 10) {
                 Sprite(phase: .working(tool: "Edit", target: ""), size: 14)
-                (Text("island").font(.system(size: 12, weight: .semibold, design: .rounded)) + Text("  Editing IslandView.swift").font(.system(size: 11)).foregroundColor(Palette.dim))
+                (Text("island").font(.system(size: 12, weight: .semibold, design: Prefs.titleDesign)) + Text("  Editing IslandView.swift").font(.system(size: 11)).foregroundColor(Palette.dim))
                 Spacer(); Text("0:42").font(.system(size: 11, design: .monospaced)).foregroundStyle(Palette.dim); Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .bold))
             }.padding(.top, 2)
             Text("Footer  ›  opens your plan usage.").font(.system(size: 10, design: .monospaced)).foregroundStyle(Palette.dim)
@@ -98,7 +98,7 @@ struct Tutorial: View {
             title("Music and calendar", "Spotify controls and artwork; your next event with a Join button. Ten minutes before a meeting the island tells you.")
             HStack(spacing: 8) {
                 Image(systemName: "calendar").font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.attention)
-                Text("Standup").font(.system(size: 12, weight: .semibold, design: .rounded))
+                Text("Standup").font(.system(size: 12, weight: .semibold, design: Prefs.titleDesign))
                 Text("4m").font(.system(size: 11, design: .monospaced)).foregroundStyle(Palette.attention)
                 Spacer()
                 Text("Settings: ⚙ in the tab strip or right-click the island.").font(.system(size: 10)).foregroundStyle(Palette.dim)

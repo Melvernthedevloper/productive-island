@@ -4,13 +4,14 @@ import SwiftUI
 struct Bars: View {
     var levels: [CGFloat]      // 0...1, count 5
     var color: Color
+    var thick: Bool = Prefs.thickBars
 
     var body: some View {
-        HStack(alignment: .center, spacing: 2) {
+        HStack(alignment: .center, spacing: thick ? 3 : 2) {
             ForEach(0..<5, id: \.self) { i in
-                RoundedRectangle(cornerRadius: 1)
+                RoundedRectangle(cornerRadius: thick ? 0 : 1)
                     .fill(color)
-                    .frame(width: 2, height: max(1, 12 * (levels.indices.contains(i) ? levels[i] : 0)))
+                    .frame(width: thick ? 4 : 2, height: max(thick ? 2 : 1, 12 * (levels.indices.contains(i) ? levels[i] : 0)))
             }
         }
         .frame(height: 12)
