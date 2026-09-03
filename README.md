@@ -16,7 +16,17 @@ Native SwiftUI, ~30 MB, no accounts, no network calls except Spotify artwork. Ev
 - Xcode command line tools (`xcode-select --install`)
 - Claude Code, and optionally the Claude desktop app and Spotify
 
-## Install
+## Download
+
+Grab `ProductiveIsland-x.y.dmg` from [Releases](https://github.com/Melvernthedevloper/productive-island/releases), open it, drag the app to Applications. It isn't notarized (no paid developer account), so the first launch needs **right-click → Open** once, or:
+
+```sh
+xattr -d com.apple.quarantine "/Applications/ProductiveIsland.app"
+```
+
+Then run `"/Applications/ProductiveIsland.app/Contents/MacOS/ProductiveIsland" --install-hooks` once so Claude Code can talk to it, and follow the in-island tutorial for permissions.
+
+## Install from source
 
 ```sh
 git clone https://github.com/Melvernthedevloper/productive-island.git
@@ -111,6 +121,7 @@ Gemini CLI, Cursor, Antigravity and friends can plug in the same way wherever th
 swift build                      # debug build
 .build/debug/ProductiveIsland --sprites sheet.png   # render the pixel worker's frames
 .build/debug/ProductiveIsland --icon icon.png       # render the app icon
+./make-dmg.sh                    # ProductiveIsland-<version>.dmg for distribution
 ```
 
 Fake an event without Claude:
