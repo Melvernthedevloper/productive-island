@@ -4,8 +4,8 @@ import SwiftUI
 
 enum IslandMetrics {
     // Small / Medium / Large: lobe width and panel heights scale; type stays readable at every size.
-    static var scale: CGFloat { [0.86, 1.0, 1.15][Prefs.size] }
-    static var lobe: CGFloat { [150, 175, 205][Prefs.size] }
+    static var scale: CGFloat { [0.78, 1.0, 1.15][Prefs.size] }
+    static var lobe: CGFloat { [125, 175, 205][Prefs.size] }
     static var panelHeight: CGFloat { 108 * scale }      // grows down only — width stays the compact width
     static var settingsHeight: CGFloat { 150 * scale }
     static let rowHeight: CGFloat = 22
