@@ -163,8 +163,8 @@ final class ClaudeState {
         default: return tool.hasPrefix("mcp__") ? "Using " + tool.split(separator: "_").last.map(String.init)!.replacingOccurrences(of: "_", with: " ") : tool + t
         }
     }
-    private nonisolated static func firstWords(_ cmd: String) -> String {
-        let clean = cmd.replacingOccurrences(of: #"^\w+=\S+\s*"#, with: "", options: .regularExpression)   // drop leading VAR=… assignments
+    nonisolated static func firstWords(_ cmd: String) -> String {
+        let clean = cmd.replacingOccurrences(of: #"^(\w+=\S+;?\s*)+"#, with: "", options: .regularExpression)   // drop leading VAR=… assignments
         let words = clean.split(separator: " ").prefix(3).joined(separator: " ")
         return words.count > 28 ? String(words.prefix(28)) + "…" : words
     }
@@ -173,7 +173,7 @@ final class ClaudeState {
 
     nonisolated static func target(_ input: [String: Any]) -> String {
         (input["file_path"] as? String).map { ($0 as NSString).lastPathComponent }
-            ?? (input["command"] as? String).map { String($0.prefix(40)) }
+            ?? (input["command"] as? String).map { String(firstWords($0).prefix(40)) }
             ?? input["pattern"] as? String ?? ""
     }
     nonisolated static func detail(_ input: [String: Any]) -> String {
