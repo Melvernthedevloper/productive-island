@@ -4,8 +4,9 @@ import SwiftUI
 
 enum IslandMetrics {
     // Small / Medium / Large: lobe width and panel heights scale; type stays readable at every size.
-    static var scale: CGFloat { [0.78, 1.0, 1.15][Prefs.size] }
-    static var lobe: CGFloat { [125, 175, 205][Prefs.size] }
+    // Sizes: 0 small · 1 medium · 2 large · 3 fit-notch (invisible when idle, grows to small when something happens)
+    static var scale: CGFloat { [0.78, 1.0, 1.15, 0.78][Prefs.size] }
+    static var lobe: CGFloat { [125, 175, 205, 125][Prefs.size] }
     static var panelHeight: CGFloat { 108 * scale }      // grows down only — width stays the compact width
     static var settingsHeight: CGFloat { 150 * scale }
     static let rowHeight: CGFloat = 22
@@ -72,7 +73,10 @@ struct IslandView: View {
 
     private var card: ClaudeState.Session? { claude.waiting }
     private var expanded: Bool { hovering || pinned || showFull != nil || card != nil || tutorial != nil || showSettings }
-    private var width: CGFloat { notch.width + 2 * IslandMetrics.lobe }
+    /// Fit-notch collapses the wings when there's nothing to say.
+    private var idle: Bool { claude.sessions.isEmpty && !(srcSpotify && spotify.state.playing) && soonEvent == nil }
+    private var lobe: CGFloat { Prefs.size == 3 && idle && !expanded ? 0 : IslandMetrics.lobe }
+    private var width: CGFloat { notch.width + 2 * lobe }
     private var height: CGFloat {
         if !expanded { return notch.height }
         if tutorial != nil { return Tutorial.height }
@@ -123,6 +127,7 @@ struct IslandView: View {
             .offset(y: IslandMetrics.drop)
             .animation(.spring(response: 0.45, dampingFraction: 0.78), value: height)
             .animation(.spring(response: 0.45, dampingFraction: 0.78), value: size)
+            .animation(.spring(response: 0.45, dampingFraction: 0.78), value: width)
             .onHover(perform: hover)
             .contextMenu {
                 Button("Settings…") { SettingsWindow.shared.show() }
@@ -239,10 +244,11 @@ struct IslandView: View {
 
     private var compact: some View {
         HStack(spacing: 0) {
-            leftLobe.frame(width: IslandMetrics.lobe)
-            Group { if Prefs.showBars { Bars(levels: levels, color: accent) } else { Color.clear } }.frame(width: notch.width)
-            claudeLobe.frame(width: IslandMetrics.lobe)
+            if lobe > 0 { leftLobe.frame(width: lobe) }
+            Group { if Prefs.showBars && lobe > 0 { Bars(levels: levels, color: accent) } else { Color.clear } }.frame(width: notch.width)
+            if lobe > 0 { claudeLobe.frame(width: lobe) }
         }
+        .clipped()
         .frame(height: notch.height)
         .foregroundStyle(.white)
     }
@@ -457,7 +463,7 @@ struct IslandView: View {
             }
             HStack(spacing: 10) {
                 Text("Size").font(.system(size: 11)).foregroundStyle(Palette.dim).frame(width: 60, alignment: .leading)
-                ForEach(Array(["Small", "Medium", "Large"].enumerated()), id: \.offset) { i, name in
+                ForEach(Array(["Small", "Medium", "Large", "Fit notch"].enumerated()), id: \.offset) { i, name in
                     Button(name) { withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { size = i } }
                         .buttonStyle(.plain).font(.system(size: 11, weight: .medium))
                         .foregroundStyle(size == i ? .white : Palette.dim)

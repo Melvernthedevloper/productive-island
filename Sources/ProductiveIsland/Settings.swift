@@ -159,7 +159,8 @@ struct SettingsView: View {
                 }
                 Toggle("Reduce animation", isOn: $reduceAnimation)
                 Toggle("Show the pixel worker", isOn: $showWorker)
-                Picker("Island size", selection: $size) { Text("Small").tag(0); Text("Medium").tag(1); Text("Large").tag(2) }.pickerStyle(.segmented)
+                Picker("Island size", selection: $size) { Text("Small").tag(0); Text("Medium").tag(1); Text("Large").tag(2); Text("Fit notch").tag(3) }.pickerStyle(.segmented)
+                if size == 3 { Text("Invisible while idle — grows when music plays, Claude works, or a meeting is near.").font(.caption).foregroundStyle(.secondary) }
             }
             Section("Sources") {
                 sourceRow("Claude Code", $srcCode, ok: hooksInstalled, fix: "Install hooks") { try? ClaudeFeed.installHooks(); hooksInstalled = SettingsView.hooksPresent() }
@@ -283,12 +284,12 @@ struct PillPreview: View {
                 .padding(.horizontal, 14).frame(height: 32)
             Rectangle().fill(.black).frame(width: 120, height: 32).clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 12, bottomTrailingRadius: 12))
             IslandSurface(radius: radius, detached: detached, glass: glass, border: border, compact: true)
-                .frame(width: 120 + 2 * [90, 105, 120][size], height: 32)
+                .frame(width: 120 + 2 * [90, 105, 120, 90][size], height: 32)
                 .overlay {
                     HStack(spacing: 0) {
-                        HStack(spacing: 6) { Record(image: nil, playing: false, size: 16); label("Ivy") ; Spacer(minLength: 0) }.padding(.horizontal, 10).frame(width: [90, 105, 120][size])
+                        HStack(spacing: 6) { Record(image: nil, playing: false, size: 16); label("Ivy") ; Spacer(minLength: 0) }.padding(.horizontal, 10).frame(width: [90, 105, 120, 90][size])
                         Group { if showBars { Bars(levels: [0.4, 0.9, 0.3, 0.7, 0.5], color: Palette.claude, thick: thickBars) } else { Color.clear } }.frame(width: 120)
-                        HStack(spacing: 6) { Spacer(minLength: 0); label("Editing app.ts", mono: true); if showWorker { Sprite(phase: .working(tool: "Edit", target: ""), size: 16) } else { Orb(phase: .working(tool: "Edit", target: ""), size: 9) } }.padding(.horizontal, 10).frame(width: [90, 105, 120][size])
+                        HStack(spacing: 6) { Spacer(minLength: 0); label("Editing app.ts", mono: true); if showWorker { Sprite(phase: .working(tool: "Edit", target: ""), size: 16) } else { Orb(phase: .working(tool: "Edit", target: ""), size: 9) } }.padding(.horizontal, 10).frame(width: [90, 105, 120, 90][size])
                     }
                     .foregroundStyle(.white)
                     .offset(y: detached ? 6 : 0)
