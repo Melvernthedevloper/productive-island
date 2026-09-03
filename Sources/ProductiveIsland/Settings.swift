@@ -161,20 +161,22 @@ struct TabsEditor: View {
     @State private var custom = ""
 
     var body: some View {
-        List {
-            ForEach(tabs, id: \.self) { t in
-                HStack {
-                    Image(systemName: "line.3.horizontal").foregroundStyle(.secondary)
-                    Text(TabsEditor.title(t))
-                    Spacer()
-                    if t.hasPrefix("agent:") {
-                        Button { tabs.removeAll { $0 == t }; Prefs.tabs = tabs } label: { Image(systemName: "minus.circle") }.buttonStyle(.plain).foregroundStyle(.secondary)
-                    }
-                }
+        // ponytail: List.onMove is flaky inside a grouped Form on macOS, so rows carry ▲▼ and also accept drag.
+        ForEach(Array(tabs.enumerated()), id: \.element) { i, t in
+            HStack(spacing: 8) {
+                Text(TabsEditor.title(t)).frame(maxWidth: .infinity, alignment: .leading)
+                Button { move(i, -1) } label: { Image(systemName: "chevron.up") }.disabled(i == 0)
+                Button { move(i, 1) } label: { Image(systemName: "chevron.down") }.disabled(i == tabs.count - 1)
+                Button { tabs.removeAll { $0 == t }; Prefs.tabs = tabs } label: { Image(systemName: "minus.circle") }
+                    .disabled(!t.hasPrefix("agent:")).opacity(t.hasPrefix("agent:") ? 1 : 0.3)
             }
-            .onMove { from, to in tabs.move(fromOffsets: from, toOffset: to); Prefs.tabs = tabs }
+            .buttonStyle(.borderless)
+            .draggable(t)
+            .dropDestination(for: String.self) { items, _ in
+                guard let from = items.first, let a = tabs.firstIndex(of: from), let b = tabs.firstIndex(of: t), a != b else { return false }
+                tabs.move(fromOffsets: IndexSet(integer: a), toOffset: b > a ? b + 1 : b); Prefs.tabs = tabs; return true
+            }
         }
-        .frame(height: CGFloat(tabs.count) * 28 + 8)
         HStack {
             Menu("Add an agent") {
                 ForEach(Prefs.knownAgents.filter { !tabs.contains("agent:" + $0.lowercased()) }, id: \.self) { a in
@@ -184,6 +186,11 @@ struct TabsEditor: View {
             TextField("or type a name", text: $custom).textFieldStyle(.roundedBorder).frame(width: 140)
                 .onSubmit { let n = custom.trimmingCharacters(in: .whitespaces).lowercased(); guard !n.isEmpty else { return }; tabs.append("agent:" + n); Prefs.tabs = tabs; custom = "" }
         }
+    }
+
+    private func move(_ i: Int, _ d: Int) {
+        let j = i + d; guard tabs.indices.contains(j) else { return }
+        tabs.swapAt(i, j); Prefs.tabs = tabs
     }
 
     static func title(_ t: String) -> String {
