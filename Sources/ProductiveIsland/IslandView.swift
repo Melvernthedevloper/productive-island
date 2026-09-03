@@ -3,7 +3,7 @@ import EventKit
 import SwiftUI
 
 enum IslandMetrics {
-    static let lobe: CGFloat = 175
+    static var lobe: CGFloat { Prefs.compactLobe ? 150 : 175 }
     static let panelHeight: CGFloat = 108      // grows down only — width stays the compact width
     static let rowHeight: CGFloat = 22
     static let usageHeight: CGFloat = 16
@@ -12,8 +12,8 @@ enum IslandMetrics {
     static let cardHeight: CGFloat = 170
     static let fullHeight: CGFloat = 260
     static let corner: CGFloat = 18
-    static let hoverDelay: Duration = .milliseconds(150)
-    static let linger: TimeInterval = 2          // stays open this long after the cursor leaves
+    static var hoverDelay: Duration { .milliseconds(Int(Prefs.hoverDelay * 1000)) }
+    static var linger: TimeInterval { Prefs.linger }          // stays open this long after the cursor leaves
 
     static func panelSize(notch: Notch) -> CGSize {
         CGSize(width: notch.width + 2 * lobe + 40, height: fullHeight + 40)
@@ -21,7 +21,8 @@ enum IslandMetrics {
 }
 
 enum Palette {
-    static let claude = Color(red: 0xD9/255, green: 0x77/255, blue: 0x57/255)
+    static let terracotta = Color(red: 0xD9/255, green: 0x77/255, blue: 0x57/255)
+    static var claude: Color { Prefs.accentMode == 2 ? Color(hex: Prefs.accentHex) : terracotta }
     static let attention = Color(red: 1.0, green: 0xB3/255, blue: 0x40/255)
     static let ok = Color(red: 0x30/255, green: 0xD1/255, blue: 0x58/255)
     static let dim = Color(white: 0.56)
@@ -51,6 +52,12 @@ struct IslandView: View {
     @State private var showUsage = false
     @AppStorage("soundOn") private var soundOn = true
     @AppStorage("calendarScope") private var scope: Scope = .today
+    @AppStorage("showWorker") private var showWorker = true
+    @AppStorage("compactLobe") private var compactLobe = false
+    @AppStorage("accentMode") private var accentMode = 0
+    @AppStorage("accentHex") private var accentHex = "D97757"
+    @AppStorage("src.spotify") private var srcSpotify = true
+    @AppStorage("src.calendar") private var srcCalendar = true
 
     private var card: ClaudeState.Session? { claude.waiting }
     private var expanded: Bool { hovering || pinned || showFull != nil || card != nil }
@@ -71,13 +78,13 @@ struct IslandView: View {
         if card != nil { return Palette.attention }
         if let p = claude.primary {
             if p.isDone && p.urgency == 1 { return Palette.ok }
-            if claude.anyWorking { return Palette.claude }
+            if claude.anyWorking { return Prefs.accentMode == 1 && spotify.state.hasTrack ? spotify.state.accent : Palette.claude }
         }
         return spotify.state.playing ? spotify.state.accent : .white.opacity(0.9)
     }
     /// Calendar borrows the left lobe when something starts within 10 minutes.
     private var soonEvent: EKEvent? {
-        if let m = calendar.minutesToNext(), m <= 10, m >= -1 { return calendar.next }
+        if srcCalendar, let m = calendar.minutesToNext(), m <= 10, m >= -1 { return calendar.next }
         return nil
     }
 
@@ -93,6 +100,10 @@ struct IslandView: View {
             .frame(width: width, height: height)
             .animation(.spring(response: 0.45, dampingFraction: 0.78), value: height)
             .onHover(perform: hover)
+            .contextMenu {
+                Button("Settings…") { SettingsWindow.shared.show() }
+                Button("Quit Productive Island") { NSApp.terminate(nil) }
+            }
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity)
@@ -212,8 +223,8 @@ struct IslandView: View {
             .padding(.horizontal, 12)
         } else {
             HStack(spacing: 8) {
-                Record(image: spotify.state.artwork, playing: spotify.state.playing, size: 18)
-                if spotify.state.hasTrack {
+                Record(image: spotify.state.artwork, playing: srcSpotify && spotify.state.playing, size: 18)
+                if srcSpotify, spotify.state.hasTrack {
                     Text(spotify.state.name).lineLimit(1).truncationMode(.tail)
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundStyle(spotify.state.playing ? .white : Palette.dim)
@@ -244,7 +255,7 @@ struct IslandView: View {
                 Text("idle").foregroundStyle(Palette.dim)
             }
             if claude.sessions.count > 1 { Text("+\(claude.sessions.count - 1)").foregroundStyle(Palette.dim).fixedSize() }
-            Sprite(phase: claude.primary?.phase, size: 18)
+            stateGlyph(claude.primary?.phase, 18)
         }
         .font(.system(size: 11, weight: .medium, design: .monospaced))
         .padding(.horizontal, 12)
@@ -279,15 +290,19 @@ struct IslandView: View {
     private var tabStrip: some View {
         HStack(spacing: 16) {
             tabButton(.music) { SpotifyGlyph(size: 12) }
-            tabButton(.claude) { Sprite(phase: claude.primary?.phase, size: 11) }
+            tabButton(.claude) { stateGlyph(claude.primary?.phase, 11) }
             tabButton(.calendar) { Image(systemName: "calendar").font(.system(size: 10, weight: .bold)) }
         }
         .frame(maxWidth: .infinity)
         .overlay(alignment: .trailing) {
-            IconButton(soundOn ? "speaker.wave.2.fill" : "speaker.slash.fill", size: 10, hit: 22) { soundOn.toggle() }
-                .foregroundStyle(soundOn ? Palette.dim : Palette.attention)
-                .padding(.trailing, 14)
-                .help(soundOn ? "Sounds on" : "Sounds off")
+            HStack(spacing: 2) {
+                IconButton(soundOn ? "speaker.wave.2.fill" : "speaker.slash.fill", size: 10, hit: 22) { soundOn.toggle() }
+                    .foregroundStyle(soundOn ? Palette.dim : Palette.attention)
+                    .help(soundOn ? "Sounds on" : "Sounds off")
+                IconButton("gearshape.fill", size: 10, hit: 22) { SettingsWindow.shared.show() }
+                    .foregroundStyle(Palette.dim).help("Settings")
+            }
+            .padding(.trailing, 10)
         }
         .frame(height: 18)
     }
@@ -500,7 +515,7 @@ struct IslandView: View {
 
     private func sessionRow(_ s: ClaudeState.Session) -> some View {
         HStack(spacing: 10) {
-            Sprite(phase: s.phase, size: 14)
+            stateGlyph(s.phase, 14)
             Group {
                 switch s.phase {
                 case .working(let tool, let target):
@@ -641,6 +656,12 @@ struct IslandView: View {
         for id in ids {
             if let app = NSRunningApplication.runningApplications(withBundleIdentifier: id).first { app.activate(); return }
         }
+    }
+}
+
+extension IslandView {
+    @ViewBuilder func stateGlyph(_ phase: ClaudeState.Phase?, _ size: CGFloat) -> some View {
+        if showWorker { Sprite(phase: phase, size: size) } else { Orb(phase: phase, size: size * 0.6) }
     }
 }
 

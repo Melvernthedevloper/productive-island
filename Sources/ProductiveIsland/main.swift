@@ -17,7 +17,7 @@ if CommandLine.arguments.contains("--install-hooks") {
 /// System chime, overridable by dropping `<name>.aiff` into ~/Library/Application Support/ProductiveIsland/.
 enum Sound {
     static func play(_ name: String, fallback: String) {
-        guard UserDefaults.standard.object(forKey: "soundOn") as? Bool ?? true else { return }
+        guard Prefs.soundOn else { return }
         let custom = (ClaudeFeed.socketPath as NSString).deletingLastPathComponent + "/\(name).aiff"
         let s = NSSound(contentsOfFile: custom, byReference: true) ?? NSSound(named: fallback)
         s?.volume = 0.6
@@ -86,6 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor in claude.apply(e, decide: { ClaudeFeed.answer(conn, allow: $0) }) }
         }
         desktop = ClaudeDesktopFeed(state: claude)
+        if ProcessInfo.processInfo.environment["PI_OPEN_SETTINGS"] != nil { SettingsWindow.shared.show() }   // for screenshots/tests
     }
 }
 

@@ -35,7 +35,7 @@ final class ClaudeAppFeed {
     }
 
     private func poll() {
-        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: ClaudeAppFeed.bundleID).first else { return }
+        guard Prefs.source("chat"), let app = NSRunningApplication.runningApplications(withBundleIdentifier: ClaudeAppFeed.bundleID).first else { return }
         if !trusted { trusted = AXIsProcessTrusted(); if !trusted { log("not trusted"); requestPermission(); return } }
         let ax = AXUIElementCreateApplication(app.processIdentifier)
         AXUIElementSetAttributeValue(ax, "AXManualAccessibility" as CFString, kCFBooleanTrue)   // Electron exposes web content only when asked

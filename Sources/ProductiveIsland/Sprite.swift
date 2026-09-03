@@ -5,7 +5,8 @@ import SwiftUI
 struct Sprite: View {
     let phase: ClaudeState.Phase?
     var size: CGFloat = 12
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    private var reduceMotion: Bool { systemReduceMotion || Prefs.reduceAnimation }
     @State private var blink = false
 
     static let frames: [String: [[String]]] = [

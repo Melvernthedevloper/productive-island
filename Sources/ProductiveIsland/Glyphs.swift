@@ -4,7 +4,8 @@ import SwiftUI
 struct Orb: View {
     let phase: ClaudeState.Phase?      // nil = idle
     var size: CGFloat = 10
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    private var reduceMotion: Bool { systemReduceMotion || Prefs.reduceAnimation }
     @State private var spin = false
     @State private var breathe = false
     @State private var pop = false
@@ -66,7 +67,8 @@ struct Record: View {
     let image: NSImage?
     let playing: Bool
     var size: CGFloat = 18
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    private var reduceMotion: Bool { systemReduceMotion || Prefs.reduceAnimation }
     @State private var angle: Double = 0
 
     var body: some View {

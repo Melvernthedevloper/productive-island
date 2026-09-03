@@ -115,6 +115,7 @@ final class ClaudeState {
     // MARK: Cowork audit.jsonl
 
     func applyCowork(_ o: [String: Any], id: String, title: String, model: String) {
+        guard Prefs.source("cowork") else { return }
         switch o["type"] as? String {
         case "user":
             upsert(id, source: .cowork, name: title) { $0.model = model; $0.phase = .working(tool: "thinking", target: "") }
@@ -134,6 +135,7 @@ final class ClaudeState {
     // MARK: Claude app chat (Accessibility)
 
     func applyChat(streaming: Bool, title: String) {
+        guard Prefs.source("chat") else { return }
         if streaming {
             upsert("chat", source: .chat, name: title) { $0.phase = .working(tool: "writing", target: "") }
         } else if sessions.contains(where: { $0.id == "chat" }) {

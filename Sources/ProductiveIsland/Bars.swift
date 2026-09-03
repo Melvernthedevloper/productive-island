@@ -14,6 +14,6 @@ struct Bars: View {
             }
         }
         .frame(height: 12)
-        .animation(.spring(response: 0.18, dampingFraction: 0.6), value: levels)
+        .animation(Prefs.reduceAnimation ? nil : .spring(response: 0.18, dampingFraction: 0.6), value: levels)
     }
 }
