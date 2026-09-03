@@ -3,20 +3,24 @@ import EventKit
 import SwiftUI
 
 enum IslandMetrics {
-    static var lobe: CGFloat { Prefs.compactLobe ? 150 : 175 }
-    static let panelHeight: CGFloat = 108      // grows down only — width stays the compact width
+    // Small / Medium / Large: lobe width and panel heights scale; type stays readable at every size.
+    static var scale: CGFloat { [0.86, 1.0, 1.15][Prefs.size] }
+    static var lobe: CGFloat { [150, 175, 205][Prefs.size] }
+    static var panelHeight: CGFloat { 108 * scale }      // grows down only — width stays the compact width
+    static var settingsHeight: CGFloat { 168 * scale }
     static let rowHeight: CGFloat = 22
     static let usageHeight: CGFloat = 16
     static let usageDetailHeight: CGFloat = 36
-    static let weekHeight: CGFloat = 150
-    static let cardHeight: CGFloat = 170
-    static let fullHeight: CGFloat = 260
+    static var weekHeight: CGFloat { 150 * scale }
+    static var cardHeight: CGFloat { 170 * scale }
+    static var fullHeight: CGFloat { 260 * scale }
     static let corner: CGFloat = 18
     static var hoverDelay: Duration { .milliseconds(Int(Prefs.hoverDelay * 1000)) }
     static var linger: TimeInterval { Prefs.linger }          // stays open this long after the cursor leaves
 
+    /// The NSPanel is sized once, for the largest setting; the island centres inside it.
     static func panelSize(notch: Notch) -> CGSize {
-        CGSize(width: notch.width + 2 * lobe + 40, height: fullHeight + 40)
+        CGSize(width: notch.width + 2 * 205 + 40, height: 260 * 1.15 + 40)
     }
 }
 
@@ -56,7 +60,10 @@ struct IslandView: View {
     @AppStorage("soundOn") private var soundOn = true
     @AppStorage("calendarScope") private var scope: Scope = .today
     @AppStorage("showWorker") private var showWorker = true
-    @AppStorage("compactLobe") private var compactLobe = false
+    @AppStorage("size") private var size = 1
+    @AppStorage("linger") private var lingerPref = 2.0
+    @AppStorage("reduceAnimation") private var reduceAnimation = false
+    @State private var showSettings = false
     @AppStorage("accentMode") private var accentMode = 0
     @AppStorage("accentHex") private var accentHex = "D97757"
     @AppStorage("src.spotify") private var srcSpotify = true
@@ -68,6 +75,7 @@ struct IslandView: View {
     private var height: CGFloat {
         if !expanded { return notch.height }
         if tutorial != nil { return Tutorial.height }
+        if showSettings { return IslandMetrics.settingsHeight }
         if card != nil { return IslandMetrics.cardHeight }
         if showFull != nil { return IslandMetrics.fullHeight }
         switch tab {
@@ -112,6 +120,7 @@ struct IslandView: View {
             }
             .frame(width: width, height: height)
             .animation(.spring(response: 0.45, dampingFraction: 0.78), value: height)
+            .animation(.spring(response: 0.45, dampingFraction: 0.78), value: size)
             .onHover(perform: hover)
             .contextMenu {
                 Button("Settings…") { SettingsWindow.shared.show() }
@@ -131,12 +140,13 @@ struct IslandView: View {
         .task { while !Task.isCancelled { claude.prune(); try? await Task.sleep(for: .seconds(30)) } }
         .onChange(of: claude.sessions.map { "\($0.id):\($0.phase)" }) { _, _ in react() }
         .onChange(of: card?.id) { _, id in keyboard(active: id != nil) }
-        .onChange(of: expanded) { _, open in if !open { showUsage = false } }
+        .onChange(of: expanded) { _, open in if !open { showUsage = false; showSettings = false } }
         .onChange(of: tab) { _, _ in showUsage = false }
         .onChange(of: calendar.minutesToNext()) { _, m in if let m, m == 5 { open(Tab.calendar, for: .seconds(8)) } }
         .onChange(of: spotify.state.name) { _, _ in if expanded && card == nil { tab = Tab.music } }
         .onAppear {
             installSwipe()
+            if ProcessInfo.processInfo.environment["PI_OPEN"] == "settings" { showSettings = true }   // for screenshots/tests
             if !Prefs.hasSeenTutorial { Task { try? await Task.sleep(for: .seconds(1)); tutorial = 0 } }
         }
         .onReceive(NotificationCenter.default.publisher(for: .replayTutorial)) { _ in tutorial = 0 }
@@ -244,7 +254,7 @@ struct IslandView: View {
             .padding(.horizontal, 12)
         } else {
             HStack(spacing: 8) {
-                Record(image: spotify.state.artwork, playing: srcSpotify && spotify.state.playing, size: 18)
+                Record(image: spotify.state.artwork, playing: srcSpotify && spotify.state.playing, size: 18 * IslandMetrics.scale)
                 if srcSpotify, spotify.state.hasTrack {
                     Text(spotify.state.name).lineLimit(1).truncationMode(.tail)
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
@@ -276,7 +286,7 @@ struct IslandView: View {
                 Text("idle").foregroundStyle(Palette.dim)
             }
             if claude.sessions.count > 1 { Text("+\(claude.sessions.count - 1)").foregroundStyle(Palette.dim).fixedSize() }
-            stateGlyph(claude.primary?.phase, 18)
+            stateGlyph(claude.primary?.phase, 18 * IslandMetrics.scale)
         }
         .font(.system(size: 11, weight: .medium, design: .monospaced))
         .padding(.horizontal, 12)
@@ -287,6 +297,8 @@ struct IslandView: View {
     @ViewBuilder private var panel: some View {
         if let step = tutorial {
             Tutorial(step: step, notchHeight: notch.height, spotify: spotify, next: { tutorial = $0 }, finish: { tutorial = nil; Prefs.hasSeenTutorial = true })
+        } else if showSettings {
+            quickSettings
         } else if let c = card {
             permissionCard(c)
         } else {
@@ -333,7 +345,7 @@ struct IslandView: View {
                 IconButton(soundOn ? "speaker.wave.2.fill" : "speaker.slash.fill", size: 10, hit: 22) { soundOn.toggle() }
                     .foregroundStyle(soundOn ? Palette.dim : Palette.attention)
                     .help(soundOn ? "Sounds on" : "Sounds off")
-                IconButton("gearshape.fill", size: 10, hit: 22) { SettingsWindow.shared.show() }
+                IconButton("gearshape.fill", size: 10, hit: 22) { showSettings = true }
                     .foregroundStyle(Palette.dim).help("Settings")
             }
             .padding(.trailing, 10)
@@ -426,6 +438,51 @@ struct IslandView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(TabsEditor.title(t))
+    }
+
+    // MARK: quick settings (inside the island; the window has everything)
+
+    private var quickSettings: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Settings").font(.system(size: 13, weight: .semibold, design: .rounded))
+                Spacer()
+                Button("All settings…") { showSettings = false; SettingsWindow.shared.show() }
+                    .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(Palette.attention)
+                IconButton("xmark", size: 10, hit: 22) { showSettings = false }
+            }
+            HStack(spacing: 10) {
+                Text("Size").font(.system(size: 11)).foregroundStyle(Palette.dim).frame(width: 60, alignment: .leading)
+                ForEach(Array(["Small", "Medium", "Large"].enumerated()), id: \.offset) { i, name in
+                    Button(name) { withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { size = i } }
+                        .buttonStyle(.plain).font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(size == i ? .white : Palette.dim)
+                        .padding(.horizontal, 10).padding(.vertical, 3)
+                        .background(size == i ? Color(white: 0.23) : .clear, in: RoundedRectangle(cornerRadius: 5))
+                }
+            }
+            HStack(spacing: 10) {
+                Text("Close after").font(.system(size: 11)).foregroundStyle(Palette.dim).frame(width: 60, alignment: .leading)
+                Slider(value: $lingerPref, in: 0...5, step: 0.5).frame(width: 140).controlSize(.mini)
+                Text(String(format: "%.1f s", lingerPref)).font(.system(size: 10, design: .monospaced)).monospacedDigit().foregroundStyle(Palette.dim)
+            }
+            HStack(spacing: 18) {
+                quickToggle("Sounds", $soundOn)
+                quickToggle("Animation", Binding(get: { !reduceAnimation }, set: { reduceAnimation = !$0 }))
+                quickToggle("Pixel worker", $showWorker)
+            }
+        }
+        .padding(.horizontal, 18).padding(.top, notch.height + 6).padding(.bottom, 10)
+        .foregroundStyle(.white)
+    }
+
+    private func quickToggle(_ name: String, _ on: Binding<Bool>) -> some View {
+        Button { on.wrappedValue.toggle() } label: {
+            HStack(spacing: 6) {
+                Image(systemName: on.wrappedValue ? "checkmark.circle.fill" : "circle").foregroundStyle(on.wrappedValue ? Palette.ok : Palette.dim)
+                Text(name).font(.system(size: 11))
+            }.contentShape(Rectangle())
+        }.buttonStyle(.plain)
     }
 
     // MARK: permission card

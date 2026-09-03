@@ -11,7 +11,7 @@ enum Prefs {
     static var hoverDelay: Double { d.object(forKey: "hoverDelay") as? Double ?? 0.15 }
     static var reduceAnimation: Bool { d.bool(forKey: "reduceAnimation") }
     static var showWorker: Bool { d.object(forKey: "showWorker") as? Bool ?? true }
-    static var compactLobe: Bool { d.bool(forKey: "compactLobe") }
+    static var size: Int { d.object(forKey: "size") as? Int ?? 1 }        // 0 small · 1 medium · 2 large
     static var accentMode: Int { d.integer(forKey: "accentMode") }           // 0 terracotta · 1 album art · 2 custom
     static var accentHex: String { d.string(forKey: "accentHex") ?? "D97757" }
     static func source(_ k: String) -> Bool { d.object(forKey: "src.\(k)") as? Bool ?? true }
@@ -66,7 +66,7 @@ struct SettingsView: View {
     @AppStorage("hoverDelay") private var hoverDelay = 0.15
     @AppStorage("reduceAnimation") private var reduceAnimation = false
     @AppStorage("showWorker") private var showWorker = true
-    @AppStorage("compactLobe") private var compactLobe = false
+    @AppStorage("size") private var size = 1
     @AppStorage("accentMode") private var accentMode = 0
     @AppStorage("accentHex") private var accentHex = "D97757"
     @AppStorage("calendarScope") private var scope: Scope = .today
@@ -104,7 +104,7 @@ struct SettingsView: View {
                 }
                 Toggle("Reduce animation", isOn: $reduceAnimation)
                 Toggle("Show the pixel worker", isOn: $showWorker)
-                Toggle("Compact island (13-inch)", isOn: $compactLobe)
+                Picker("Island size", selection: $size) { Text("Small").tag(0); Text("Medium").tag(1); Text("Large").tag(2) }.pickerStyle(.segmented)
             }
             Section("Sources") {
                 sourceRow("Claude Code", $srcCode, ok: hooksInstalled, fix: "Install hooks") { try? ClaudeFeed.installHooks(); hooksInstalled = SettingsView.hooksPresent() }
