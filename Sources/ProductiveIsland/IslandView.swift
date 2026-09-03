@@ -75,7 +75,9 @@ struct IslandView: View {
     private var expanded: Bool { hovering || pinned || showFull != nil || card != nil || tutorial != nil || showSettings }
     /// Fit-notch collapses the wings when there's nothing to say.
     private var idle: Bool { !claude.sessions.contains { $0.urgency < 3 } && !(srcSpotify && spotify.state.playing) && soonEvent == nil }
-    private var lobe: CGFloat { Prefs.size == 3 && idle && !expanded ? 0 : IslandMetrics.lobe }
+    static let miniLobe: CGFloat = 32          // fit-notch at rest: icon-only wings
+    private var mini: Bool { Prefs.size == 3 && idle && !expanded }
+    private var lobe: CGFloat { mini ? IslandView.miniLobe : IslandMetrics.lobe }
     private var width: CGFloat { notch.width + 2 * lobe }
     private var height: CGFloat {
         if !expanded { return notch.height }
@@ -242,16 +244,26 @@ struct IslandView: View {
 
     // MARK: - compact pill
 
-    private var compact: some View {
-        HStack(spacing: 0) {
-            if lobe > 0 { leftLobe.frame(width: lobe) }
-            Group { if Prefs.showBars && lobe > 0 { Bars(levels: levels, color: accent) } else { Color.clear } }.frame(width: notch.width)
-            if lobe > 0 { claudeLobe.frame(width: lobe) }
+    @ViewBuilder private var compact: some View {
+        if mini {
+            HStack(spacing: 0) {
+                Record(image: spotify.state.artwork, playing: false, size: 14).frame(width: IslandView.miniLobe)
+                Color.clear.frame(width: notch.width)
+                stateGlyph(nil, 14).frame(width: IslandView.miniLobe)
+            }
+            .frame(height: notch.height)
+        } else {
+            HStack(spacing: 0) {
+                leftLobe.frame(width: lobe)
+                Group { if Prefs.showBars { Bars(levels: levels, color: accent) } else { Color.clear } }.frame(width: notch.width)
+                claudeLobe.frame(width: lobe)
+            }
+            .frame(height: notch.height)
+            .foregroundStyle(.white)
+            .clipped()
         }
-        .clipped()
-        .frame(height: notch.height)
-        .foregroundStyle(.white)
     }
+
 
     @ViewBuilder private var leftLobe: some View {
         if let e = soonEvent {
