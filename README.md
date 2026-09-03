@@ -97,7 +97,7 @@ $PI emit --source codex --session $ID --ask "rm -rf dist/"     # blocks, prints 
 $PI emit --source codex --session $ID --end
 ```
 
-`--source` is the label shown in the island (`codex · my-repo`). Exits 0 and stays silent when the island isn't running, so it's safe in hooks.
+`--source` is the label shown in the island (`codex · my-repo`). Give the agent its own tab with **+** at the end of the tab strip (or Settings → Tabs, where you can also drag the order and remove tabs). The default is Music · Claude · Calendar. Exits 0 and stays silent when the island isn't running, so it's safe in hooks.
 
 **Codex CLI** (untested — I don't use it; PRs welcome): in `~/.codex/config.toml`
 ```toml

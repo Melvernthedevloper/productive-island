@@ -5,6 +5,7 @@ import SwiftUI
 struct Sprite: View {
     let phase: ClaudeState.Phase?
     var size: CGFloat = 12
+    var tint: Color? = nil            // agent tabs colour the worker; nil = state colour
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     private var reduceMotion: Bool { systemReduceMotion || Prefs.reduceAnimation }
     @State private var blink = false
@@ -122,8 +123,8 @@ struct Sprite: View {
     }
     private var color: Color {
         switch phase {
-        case nil: Palette.dim
-        case .working: Palette.claude
+        case nil: tint?.opacity(0.6) ?? Palette.dim
+        case .working: tint ?? Palette.claude
         case .done: Palette.ok
         case .permission: Palette.attention
         }

@@ -15,6 +15,12 @@ enum Prefs {
     static var accentMode: Int { d.integer(forKey: "accentMode") }           // 0 terracotta · 1 album art · 2 custom
     static var accentHex: String { d.string(forKey: "accentHex") ?? "D97757" }
     static func source(_ k: String) -> Bool { d.object(forKey: "src.\(k)") as? Bool ?? true }
+    /// Tab order. Built-ins: music · claude · calendar. Agents: "agent:<name>".
+    static var tabs: [String] {
+        get { (d.string(forKey: "tabs")).flatMap { try? JSONDecoder().decode([String].self, from: Data($0.utf8)) } ?? ["music", "claude", "calendar"] }
+        set { d.set(String(data: try! JSONEncoder().encode(newValue), encoding: .utf8), forKey: "tabs"); NotificationCenter.default.post(name: .tabsChanged, object: nil) }
+    }
+    static let knownAgents = ["Codex", "Gemini", "Cursor", "Antigravity", "Copilot", "Kiro", "Windsurf"]
     static var hasSeenTutorial: Bool { get { d.bool(forKey: "hasSeenTutorial") } set { d.set(newValue, forKey: "hasSeenTutorial") } }
 }
 
@@ -112,6 +118,9 @@ struct SettingsView: View {
                 }
                 Picker("Calendar shows", selection: $scope) { ForEach(Scope.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
             }
+            Section("Tabs") {
+                TabsEditor()
+            }
             Section {
                 Button("Replay the tutorial", action: replayTutorial)
             }
@@ -140,5 +149,44 @@ struct SettingsView: View {
 
     static func hooksPresent() -> Bool {
         ((try? String(contentsOfFile: NSHomeDirectory() + "/.claude/settings.json", encoding: .utf8)) ?? "").replacingOccurrences(of: "\\/", with: "/").contains("ProductiveIsland/sock")
+    }
+}
+
+
+extension Notification.Name { static let tabsChanged = Notification.Name("tabsChanged") }
+
+/// Drag to reorder; swipe or − to remove agent tabs; + to add one. The three built-ins can be reordered but not removed.
+struct TabsEditor: View {
+    @State private var tabs = Prefs.tabs
+    @State private var custom = ""
+
+    var body: some View {
+        List {
+            ForEach(tabs, id: \.self) { t in
+                HStack {
+                    Image(systemName: "line.3.horizontal").foregroundStyle(.secondary)
+                    Text(TabsEditor.title(t))
+                    Spacer()
+                    if t.hasPrefix("agent:") {
+                        Button { tabs.removeAll { $0 == t }; Prefs.tabs = tabs } label: { Image(systemName: "minus.circle") }.buttonStyle(.plain).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .onMove { from, to in tabs.move(fromOffsets: from, toOffset: to); Prefs.tabs = tabs }
+        }
+        .frame(height: CGFloat(tabs.count) * 28 + 8)
+        HStack {
+            Menu("Add an agent") {
+                ForEach(Prefs.knownAgents.filter { !tabs.contains("agent:" + $0.lowercased()) }, id: \.self) { a in
+                    Button(a) { tabs.append("agent:" + a.lowercased()); Prefs.tabs = tabs }
+                }
+            }.fixedSize()
+            TextField("or type a name", text: $custom).textFieldStyle(.roundedBorder).frame(width: 140)
+                .onSubmit { let n = custom.trimmingCharacters(in: .whitespaces).lowercased(); guard !n.isEmpty else { return }; tabs.append("agent:" + n); Prefs.tabs = tabs; custom = "" }
+        }
+    }
+
+    static func title(_ t: String) -> String {
+        switch t { case "music": "Music"; case "claude": "Claude"; case "calendar": "Calendar"; default: String(t.dropFirst(6)).capitalized }
     }
 }

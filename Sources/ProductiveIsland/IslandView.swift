@@ -30,7 +30,7 @@ enum Palette {
     static let well = Color(white: 0.08)
 }
 
-enum Tab: Int, CaseIterable { case music, claude, calendar }
+enum Tab { static let music = "music", claude = "claude", calendar = "calendar" }
 enum Scope: String, CaseIterable { case today = "Today", tomorrow = "Tomorrow", week = "Week" }
 
 struct IslandView: View {
@@ -44,7 +44,9 @@ struct IslandView: View {
     @State private var hoverTask: Task<Void, Never>?
     @State private var pinned = false
     @State private var showFull: String?         // session id whose full response is open
-    @State private var tab: Tab = .claude
+    @State private var tab: String = Tab.claude
+    @State private var tabs: [String] = Prefs.tabs
+    @State private var showAddAgent = false
     @State private var levels: [CGFloat] = [0, 0, 0, 0, 0]
     @State private var swipeX: CGFloat = 0
     @State private var chimed: Set<String> = []  // session ids already chimed for this done
@@ -69,11 +71,20 @@ struct IslandView: View {
         if card != nil { return IslandMetrics.cardHeight }
         if showFull != nil { return IslandMetrics.fullHeight }
         switch tab {
-        case .claude: return IslandMetrics.panelHeight + IslandMetrics.usageHeight + (showUsage ? IslandMetrics.usageDetailHeight : 0)
-            + IslandMetrics.rowHeight * CGFloat(max(0, min(claude.sessions.count, 5) - 3))
-        case .calendar: return scope == .week ? IslandMetrics.weekHeight : IslandMetrics.panelHeight
-        case .music: return IslandMetrics.panelHeight
+        case Tab.claude: return IslandMetrics.panelHeight + IslandMetrics.usageHeight + (showUsage ? IslandMetrics.usageDetailHeight : 0)
+            + IslandMetrics.rowHeight * CGFloat(max(0, min(claudeSessions.count, 5) - 3))
+        case Tab.calendar: return scope == .week ? IslandMetrics.weekHeight : IslandMetrics.panelHeight
+        case Tab.music: return IslandMetrics.panelHeight
+        default: return IslandMetrics.panelHeight + IslandMetrics.rowHeight * CGFloat(max(0, min(agentSessions(tab).count, 5) - 3))
         }
+    }
+
+    /// Claude's own sessions (code, cowork, chat); agents get their own tabs.
+    private var claudeSessions: [ClaudeState.Session] { claude.ordered.filter { if case .other = $0.source { false } else { true } } }
+    private func agentSessions(_ t: String) -> [ClaudeState.Session] { claude.ordered.filter { $0.source == .other(String(t.dropFirst(6))) } }
+    private func agentColor(_ t: String) -> Color {
+        let hues: [Double] = [0.47, 0.58, 0.72, 0.85, 0.1, 0.3, 0.63]
+        return Color(hue: hues[abs(t.hashValue) % hues.count], saturation: 0.55, brightness: 0.9)
     }
 
     private var accent: Color {
@@ -122,13 +133,14 @@ struct IslandView: View {
         .onChange(of: card?.id) { _, id in keyboard(active: id != nil) }
         .onChange(of: expanded) { _, open in if !open { showUsage = false } }
         .onChange(of: tab) { _, _ in showUsage = false }
-        .onChange(of: calendar.minutesToNext()) { _, m in if let m, m == 5 { open(.calendar, for: .seconds(8)) } }
-        .onChange(of: spotify.state.name) { _, _ in if expanded && card == nil { tab = .music } }
+        .onChange(of: calendar.minutesToNext()) { _, m in if let m, m == 5 { open(Tab.calendar, for: .seconds(8)) } }
+        .onChange(of: spotify.state.name) { _, _ in if expanded && card == nil { tab = Tab.music } }
         .onAppear {
             installSwipe()
             if !Prefs.hasSeenTutorial { Task { try? await Task.sleep(for: .seconds(1)); tutorial = 0 } }
         }
         .onReceive(NotificationCenter.default.publisher(for: .replayTutorial)) { _ in tutorial = 0 }
+        .onReceive(NotificationCenter.default.publisher(for: .tabsChanged)) { _ in tabs = Prefs.tabs; if !tabs.contains(tab) { tab = tabs.first ?? Tab.claude } }
         // ponytail: SwiftUI's onHover misses the exit while the frame is animating, so poll the cursor while open.
         // The island lingers `linger` seconds after the cursor leaves; coming back inside cancels the close.
         .task(id: expanded) {
@@ -146,10 +158,11 @@ struct IslandView: View {
     /// Chime once per finished session; needs-you sound once per request; open the right tab.
     private func react() {
         for s in claude.sessions {
+            let home: String = { if case .other(let n) = s.source { return "agent:" + n } else { return Tab.claude } }()
             if s.isDone, !chimed.contains(s.id) {
-                chimed.insert(s.id); Sound.play("done", fallback: "Glass"); open(.claude, for: .seconds(6))
+                chimed.insert(s.id); Sound.play("done", fallback: "Glass"); open(home, for: .seconds(6))
             } else if s.needsYou, !chimed.contains("perm:" + s.id) {
-                chimed.insert("perm:" + s.id); Sound.play("attention", fallback: "Purr"); tab = .claude
+                chimed.insert("perm:" + s.id); Sound.play("attention", fallback: "Purr"); tab = home
             }
             if !s.isDone { chimed.remove(s.id) }
             if !s.needsYou { chimed.remove("perm:" + s.id) }
@@ -172,8 +185,8 @@ struct IslandView: View {
         }
     }
 
-    private func open(_ t: Tab, for d: Duration) {
-        tab = t; pinned = true
+    private func open(_ t: String, for d: Duration) {
+        tab = tabs.contains(t) ? t : (tabs.first ?? Tab.claude); pinned = true
         Task { try? await Task.sleep(for: d); if showFull == nil { pinned = false } }
     }
 
@@ -198,8 +211,10 @@ struct IslandView: View {
             guard expanded, card == nil else { return e }
             if e.phase == .changed { swipeX += e.scrollingDeltaX }
             if e.phase == .ended {
-                if swipeX < -30, let n = Tab(rawValue: tab.rawValue + 1) { tab = n }
-                if swipeX > 30, let p = Tab(rawValue: tab.rawValue - 1) { tab = p }
+                if let i = tabs.firstIndex(of: tab) {
+                    if swipeX < -30, i + 1 < tabs.count { tab = tabs[i + 1] }
+                    if swipeX > 30, i > 0 { tab = tabs[i - 1] }
+                }
                 swipeX = 0
             }
             return e
@@ -278,9 +293,10 @@ struct IslandView: View {
             VStack(spacing: 0) {
                 Group {
                     switch tab {
-                    case .music: musicTab
-                    case .claude: claudeTab
-                    case .calendar: calendarTab
+                    case Tab.music: musicTab
+                    case Tab.claude: claudeTab
+                    case Tab.calendar: calendarTab
+                    default: agentTab(tab)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -297,9 +313,19 @@ struct IslandView: View {
 
     private var tabStrip: some View {
         HStack(spacing: 16) {
-            tabButton(.music) { SpotifyGlyph(size: 12) }
-            tabButton(.claude) { stateGlyph(claude.primary?.phase, 11) }
-            tabButton(.calendar) { Image(systemName: "calendar").font(.system(size: 10, weight: .bold)) }
+            ForEach(tabs, id: \.self) { t in
+                switch t {
+                case Tab.music: tabButton(t) { SpotifyGlyph(size: 12) }
+                case Tab.claude: tabButton(t) { stateGlyph(claudeSessions.first?.phase, 11) }
+                case Tab.calendar: tabButton(t) { Image(systemName: "calendar").font(.system(size: 10, weight: .bold)) }
+                default: tabButton(t) { Sprite(phase: agentSessions(t).first?.phase, size: 11, tint: agentColor(t)) }
+                }
+            }
+            Button { showAddAgent = true } label: {
+                Image(systemName: "plus").font(.system(size: 9, weight: .bold)).foregroundStyle(Palette.dim).frame(width: 18, height: 18).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).help("Add an AI agent tab")
+            .popover(isPresented: $showAddAgent, arrowEdge: .bottom) { addAgentMenu }
         }
         .frame(maxWidth: .infinity)
         .overlay(alignment: .trailing) {
@@ -377,7 +403,20 @@ struct IslandView: View {
         return "resets " + d.formatted(.dateTime.weekday(.abbreviated))
     }
 
-    private func tabButton<G: View>(_ t: Tab, @ViewBuilder glyph: () -> G) -> some View {
+    private var addAgentMenu: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Add a tab for").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary).padding(.bottom, 4)
+            ForEach(Prefs.knownAgents.filter { !tabs.contains("agent:" + $0.lowercased()) }, id: \.self) { a in
+                Button(a) { Prefs.tabs = tabs + ["agent:" + a.lowercased()]; tab = "agent:" + a.lowercased(); showAddAgent = false }
+                    .buttonStyle(.plain).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 2)
+            }
+            Divider().padding(.vertical, 2)
+            Button("Manage in Settings…") { showAddAgent = false; SettingsWindow.shared.show() }.buttonStyle(.plain).foregroundStyle(.secondary).font(.system(size: 11))
+        }
+        .font(.system(size: 12)).padding(10).frame(width: 150)
+    }
+
+    private func tabButton<G: View>(_ t: String, @ViewBuilder glyph: () -> G) -> some View {
         Button { tab = t; showFull = nil } label: {
             glyph().frame(width: 26, height: 18).contentShape(Rectangle())
                 .opacity(tab == t ? 1 : 0.35)
@@ -386,7 +425,7 @@ struct IslandView: View {
                 }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(String(describing: t))
+        .accessibilityLabel(TabsEditor.title(t))
     }
 
     // MARK: permission card
@@ -497,15 +536,15 @@ struct IslandView: View {
             }
         } else {
             VStack(spacing: 0) {
-                if claude.sessions.isEmpty {
+                if claudeSessions.isEmpty {
                     Text("Start Claude Code, a Cowork task, or a chat — it shows up here.")
                         .font(.system(size: 11)).foregroundStyle(Palette.dim).frame(maxWidth: .infinity, alignment: .leading).frame(height: IslandMetrics.rowHeight)
                 }
                 ForEach(claude.ordered.prefix(5)) { sessionRow($0) }
                 Spacer(minLength: 0)
                 HStack(spacing: 6) {
-                    if claude.sessions.count > 5 {
-                        Text("+\(claude.sessions.count - 5) more").font(.system(size: 10, design: .monospaced)).foregroundStyle(Palette.dim)
+                    if claudeSessions.count > 5 {
+                        Text("+\(claudeSessions.count - 5) more").font(.system(size: 10, design: .monospaced)).foregroundStyle(Palette.dim)
                     } else if chat.appRunning && !chat.trusted {
                         Text("Chat needs Accessibility").font(.system(size: 10)).foregroundStyle(Palette.dim).lineLimit(1)
                         Button("Allow") {
@@ -550,6 +589,31 @@ struct IslandView: View {
 
     private func label(_ s: ClaudeState.Session) -> String {
         switch s.source { case .cowork: "cowork · \(s.name)"; case .chat: "chat · \(s.name)"; case .code: s.name; case .other(let n): "\(n) · \(s.name)" }
+    }
+
+    // MARK: agent tabs
+
+    private func agentTab(_ t: String) -> some View {
+        let name = String(t.dropFirst(6))
+        let rows = agentSessions(t)
+        return VStack(alignment: .leading, spacing: 0) {
+            if rows.isEmpty {
+                Text("\(name.capitalized) isn't connected yet").font(.system(size: 13, weight: .semibold, design: .rounded))
+                Text("Have it run this when it starts, works, and finishes:").font(.system(size: 11)).foregroundStyle(Palette.dim).padding(.top, 2)
+                HStack(spacing: 8) {
+                    Text("ProductiveIsland emit --source \(name) --done \"…\"")
+                        .font(.system(size: 10, design: .monospaced)).lineLimit(1).truncationMode(.middle)
+                        .padding(.horizontal, 8).padding(.vertical, 4).background(Palette.well, in: RoundedRectangle(cornerRadius: 6))
+                    Button("Copy") {
+                        let cmd = Bundle.main.executablePath ?? "ProductiveIsland"
+                        NSPasteboard.general.clearContents(); NSPasteboard.general.setString("\(cmd) emit --source \(name) --session $$ --name \"$(basename \"$PWD\")\" --done \"finished\"", forType: .string)
+                    }.buttonStyle(.plain).font(.system(size: 10, weight: .semibold)).foregroundStyle(Palette.attention)
+                }.padding(.top, 6)
+                Text("README has the full recipe.").font(.system(size: 10)).foregroundStyle(Palette.dim).padding(.top, 4)
+            } else {
+                ForEach(rows.prefix(5)) { sessionRow($0) }
+            }
+        }
     }
 
     // MARK: calendar

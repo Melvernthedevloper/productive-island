@@ -263,7 +263,8 @@ final class ClaudeFeed: @unchecked Sendable {
             case "--session": e["session_id"] = next() ?? "other"
             case "--name": e["name"] = next() ?? ""
             case "--start": e["hook_event_name"] = "UserPromptSubmit"
-            case "--tool": e["hook_event_name"] = "PreToolUse"; e["tool_name"] = next() ?? "tool"
+            case "--tool":
+                e["hook_event_name"] = "PreToolUse"; e["tool_name"] = next() ?? "tool"
                 if i + 1 < args.count, !args[i + 1].hasPrefix("--") { e["tool_input"] = ["command": next()!] }
             case "--done": e["hook_event_name"] = "Stop"; e["text"] = next() ?? "Done"
             case "--ask": e["hook_event_name"] = "PermissionRequest"; e["tool_name"] = "request"; e["tool_input"] = ["command": next() ?? ""]
@@ -277,8 +278,13 @@ final class ClaudeFeed: @unchecked Sendable {
         var addr = sockaddr_un(); addr.sun_family = sa_family_t(AF_UNIX)
         withUnsafeMutablePointer(to: &addr.sun_path) { $0.withMemoryRebound(to: CChar.self, capacity: 104) { _ = strlcpy($0, socketPath, 104) } }
         let len = socklen_t(MemoryLayout<sockaddr_un>.size)
-        guard withUnsafePointer(to: &addr, { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, len) } }) == 0 else { return }
-        _ = data.withUnsafeBytes { send(fd, $0.baseAddress, data.count, 0) }
+        guard withUnsafePointer(to: &addr, { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, len) } }) == 0 else {
+            FileHandle.standardError.write(Data("productive-island: not running (\(String(cString: strerror(errno))))\n".utf8)); return
+        }
+        let sent = data.withUnsafeBytes { send(fd, $0.baseAddress, data.count, 0) }
+        if ProcessInfo.processInfo.environment["PI_DEBUG"] != nil {
+            FileHandle.standardError.write(Data("sent \(sent)/\(data.count): \(String(data: data, encoding: .utf8) ?? "")\n".utf8))
+        }
         if e["hook_event_name"] as? String == "PermissionRequest" {          // wait for the island's answer and print it
             var buf = [UInt8](repeating: 0, count: 4096)
             let n = recv(fd, &buf, buf.count, 0)
