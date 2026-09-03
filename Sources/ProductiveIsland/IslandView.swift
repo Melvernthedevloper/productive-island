@@ -254,9 +254,9 @@ struct IslandView: View {
             .frame(height: notch.height)
         } else {
             HStack(spacing: 0) {
-                leftLobe.frame(width: lobe)
-                Group { if Prefs.showBars { Bars(levels: levels, color: accent) } else { Color.clear } }.frame(width: notch.width)
-                claudeLobe.frame(width: lobe)
+                slotView(Prefs.pillLeft, trailing: false).frame(width: lobe)
+                slotView(Prefs.pillCenter, trailing: false).frame(width: notch.width)
+                slotView(Prefs.pillRight, trailing: true).frame(width: lobe)
             }
             .frame(height: notch.height)
             .foregroundStyle(.white)
@@ -264,6 +264,54 @@ struct IslandView: View {
         }
     }
 
+
+    /// One pill slot. Left/right are the wings, middle sits under the notch.
+    @ViewBuilder private func slotView(_ k: String, trailing: Bool) -> some View {
+        switch k {
+        case "music": leftLobe
+        case "claude": claudeLobe
+        case "calendar": calendarLobe(trailing: trailing)
+        case "clock":
+            TimelineView(.periodic(from: .now, by: 30)) { ctx in
+                Text(hhmm(ctx.date)).font(.system(size: 11, weight: .medium, design: .monospaced)).monospacedDigit()
+                    .frame(maxWidth: .infinity, alignment: trailing ? .trailing : .center).padding(.horizontal, 12)
+            }
+        case "bars": if Prefs.showBars { Bars(levels: levels, color: accent) } else { Color.clear }
+        case "none": Color.clear
+        default: agentLobe(k, trailing: trailing)
+        }
+    }
+
+    private func calendarLobe(trailing: Bool) -> some View {
+        HStack(spacing: 8) {
+            if trailing { Spacer(minLength: 0) }
+            if let n = calendar.next {
+                Image(systemName: "calendar").font(.system(size: 11, weight: .bold)).foregroundStyle(soonEvent != nil ? Palette.attention : Palette.dim)
+                Text((n.title ?? "Event").themed).lineLimit(1).font(.system(size: 12, weight: .semibold, design: Prefs.titleDesign))
+                Text(relative(n)).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(soonEvent != nil ? Palette.attention : Palette.dim).fixedSize()
+            } else {
+                Image(systemName: "calendar").font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.dim)
+            }
+            if !trailing { Spacer(minLength: 0) }
+        }
+        .padding(.horizontal, 12)
+    }
+
+    private func agentLobe(_ t: String, trailing: Bool) -> some View {
+        let s = agentSessions(t).first
+        return HStack(spacing: 6) {
+            if trailing { Spacer(minLength: 0) }
+            if let s, case .working(let tool, let target) = s.phase {
+                Text(ClaudeState.phrase(tool: tool, target: Prefs.showTarget ? target : "", since: s.since).themed).lineLimit(1).truncationMode(.tail)
+                if Prefs.showTimer { Elapsed(since: s.since).foregroundStyle(Palette.dim).fixedSize() }
+            } else if let s, s.isDone { Text("done".themed) }
+            else if let s, s.needsYou { Text("needs you".themed).foregroundStyle(Palette.attention) }
+            Sprite(phase: s?.phase, size: 18 * IslandMetrics.scale, tint: agentColor(t))
+            if !trailing { Spacer(minLength: 0) }
+        }
+        .font(.system(size: 11, weight: .medium, design: .monospaced))
+        .padding(.horizontal, 12)
+    }
 
     @ViewBuilder private var leftLobe: some View {
         if let e = soonEvent {
@@ -296,9 +344,9 @@ struct IslandView: View {
                 switch p.phase {
                 case .working(let tool, let target):
                     TimelineView(.periodic(from: p.since, by: 4)) { _ in
-                        Text(ClaudeState.phrase(tool: tool, target: target, since: p.since).themed).lineLimit(1).truncationMode(.tail)
+                        Text(ClaudeState.phrase(tool: tool, target: Prefs.showTarget ? target : "", since: p.since).themed).lineLimit(1).truncationMode(.tail)
                     }
-                    Elapsed(since: p.since).foregroundStyle(Palette.dim).fixedSize()
+                    if Prefs.showTimer { Elapsed(since: p.since).foregroundStyle(Palette.dim).fixedSize() }
                 case .done:
                     Text("done · \(p.name)".themed).lineLimit(1).truncationMode(.tail)
                 case .permission:

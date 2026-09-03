@@ -21,6 +21,13 @@ enum Prefs {
     static var showBars: Bool { d.object(forKey: "th.bars") as? Bool ?? true }
     static var thickBars: Bool { d.bool(forKey: "th.thickBars") }
     static var uppercase: Bool { d.bool(forKey: "th.upper") }
+    // Pill layout: what each slot shows. Slots: music · claude · calendar · clock · bars · none · agent:<name>
+    static var pillLeft: String { d.string(forKey: "pill.left") ?? "music" }
+    static var pillCenter: String { d.string(forKey: "pill.center") ?? "bars" }
+    static var pillRight: String { d.string(forKey: "pill.right") ?? "claude" }
+    static var showTimer: Bool { d.object(forKey: "pill.timer") as? Bool ?? true }
+    static var showTarget: Bool { d.object(forKey: "pill.target") as? Bool ?? true }
+    static var showInDock: Bool { d.object(forKey: "showInDock") as? Bool ?? true }
     static var titleDesign: Font.Design { [.rounded, .monospaced, .default][textStyle] }
 
     struct Preset { let name: String; let radius: Double; let detached: Bool; let text: Int; let glass: Bool; let border: Bool; let thickBars: Bool; let upper: Bool; let worker: Bool }
@@ -103,6 +110,12 @@ struct SettingsView: View {
     @AppStorage("th.bars") private var showBars = true
     @AppStorage("th.thickBars") private var thickBars = false
     @AppStorage("th.upper") private var uppercase = false
+    @AppStorage("pill.left") private var pillLeft = "music"
+    @AppStorage("pill.center") private var pillCenter = "bars"
+    @AppStorage("pill.right") private var pillRight = "claude"
+    @AppStorage("pill.timer") private var showTimer = true
+    @AppStorage("pill.target") private var showTarget = true
+    @AppStorage("showInDock") private var showInDock = true
     @State private var preset: String? = Prefs.currentPreset
     @AppStorage("accentMode") private var accentMode = 0
     @AppStorage("accentHex") private var accentHex = "D97757"
@@ -124,6 +137,8 @@ struct SettingsView: View {
                         do { if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } }
                         catch { launchAtLogin = SMAppService.mainApp.status == .enabled }
                     }
+                Toggle("Show in Dock", isOn: $showInDock)
+                    .onChange(of: showInDock) { _, on in NSApp.setActivationPolicy(on ? .regular : .accessory) }
                 Toggle("Sounds", isOn: $soundOn)
                 LabeledContent("Close after the cursor leaves") {
                     HStack { Slider(value: $linger, in: 0...5, step: 0.5).frame(width: 160); Text(String(format: "%.1f s", linger)).monospacedDigit().frame(width: 40, alignment: .trailing) }
@@ -151,6 +166,16 @@ struct SettingsView: View {
                 Toggle("Hairline border", isOn: $border)
                 Toggle("Activity bars", isOn: $showBars)
                 Toggle("Thick bars", isOn: $thickBars).disabled(!showBars)
+            }
+            Section("Pill layout") {
+                slotPicker("Left", $pillLeft, ["music", "claude", "calendar", "clock", "none"])
+                slotPicker("Middle", $pillCenter, ["bars", "clock", "none"])
+                slotPicker("Right", $pillRight, ["claude", "music", "calendar", "clock", "none"])
+                Toggle("Show elapsed time", isOn: $showTimer)
+                Toggle("Show file / command", isOn: $showTarget)
+                Text("Agent tabs can take a slot too — they appear here once added.").font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Colour") {
                 Picker("Claude colour", selection: $accentMode) {
                     Text("Terracotta").tag(0); Text("Follow album art").tag(1); Text("Custom").tag(2)
                 }
@@ -191,6 +216,16 @@ struct SettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             accessibility = AXIsProcessTrusted(); hooksInstalled = SettingsView.hooksPresent()
         }
+    }
+
+    private func slotPicker(_ label: String, _ sel: Binding<String>, _ base: [String]) -> some View {
+        let agents = Prefs.tabs.filter { $0.hasPrefix("agent:") }
+        return Picker(label, selection: sel) {
+            ForEach(base + agents, id: \.self) { Text(SettingsView.slotName($0)).tag($0) }
+        }
+    }
+    static func slotName(_ k: String) -> String {
+        switch k { case "music": "Music"; case "claude": "Claude"; case "calendar": "Calendar"; case "clock": "Clock"; case "bars": "Activity bars"; case "none": "Nothing"; default: String(k.dropFirst(6)).capitalized }
     }
 
     /// After a preset writes UserDefaults directly, pull the values back into the bound @AppStorage properties.
@@ -275,6 +310,22 @@ struct PillPreview: View {
     @AppStorage("th.upper") private var uppercase = false
     @AppStorage("showWorker") private var showWorker = true
     @AppStorage("size") private var size = 1
+    @AppStorage("pill.left") private var pillLeft = "music"
+    @AppStorage("pill.center") private var pillCenter = "bars"
+    @AppStorage("pill.right") private var pillRight = "claude"
+    @AppStorage("pill.timer") private var showTimer = true
+
+    @ViewBuilder private func slot(_ k: String, trailing: Bool) -> some View {
+        switch k {
+        case "music": HStack(spacing: 6) { Record(image: nil, playing: false, size: 16); label("Ivy") }
+        case "claude": HStack(spacing: 6) { label("Editing app.ts", mono: true); if showTimer { label("0:42", mono: true).opacity(0.6) }; if showWorker { Sprite(phase: .working(tool: "Edit", target: ""), size: 16) } else { Orb(phase: .working(tool: "Edit", target: ""), size: 9) } }
+        case "calendar": HStack(spacing: 6) { Image(systemName: "calendar").font(.system(size: 10, weight: .bold)).foregroundStyle(Palette.attention); label("Standup"); label("4m", mono: true).foregroundStyle(Palette.attention) }
+        case "clock": label("15:35", mono: true)
+        case "bars": Bars(levels: [0.4, 0.9, 0.3, 0.7, 0.5], color: Palette.claude, thick: thickBars)
+        case "none": Color.clear
+        default: HStack(spacing: 6) { label("npm test", mono: true); Sprite(phase: .working(tool: "Bash", target: ""), size: 16, tint: .cyan) }
+        }
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -287,9 +338,9 @@ struct PillPreview: View {
                 .frame(width: 120 + 2 * [90, 105, 120, 90][size], height: 32)
                 .overlay {
                     HStack(spacing: 0) {
-                        HStack(spacing: 6) { Record(image: nil, playing: false, size: 16); label("Ivy") ; Spacer(minLength: 0) }.padding(.horizontal, 10).frame(width: [90, 105, 120, 90][size])
-                        Group { if showBars { Bars(levels: [0.4, 0.9, 0.3, 0.7, 0.5], color: Palette.claude, thick: thickBars) } else { Color.clear } }.frame(width: 120)
-                        HStack(spacing: 6) { Spacer(minLength: 0); label("Editing app.ts", mono: true); if showWorker { Sprite(phase: .working(tool: "Edit", target: ""), size: 16) } else { Orb(phase: .working(tool: "Edit", target: ""), size: 9) } }.padding(.horizontal, 10).frame(width: [90, 105, 120, 90][size])
+                        HStack(spacing: 0) { slot(pillLeft, trailing: false); Spacer(minLength: 0) }.padding(.horizontal, 10).frame(width: [90, 105, 120, 90][size]).clipped()
+                        Group { if showBars || pillCenter != "bars" { slot(pillCenter, trailing: false) } else { Color.clear } }.frame(width: 120)
+                        HStack(spacing: 0) { Spacer(minLength: 0); slot(pillRight, trailing: true) }.padding(.horizontal, 10).frame(width: [90, 105, 120, 90][size]).clipped()
                     }
                     .foregroundStyle(.white)
                     .offset(y: detached ? 6 : 0)

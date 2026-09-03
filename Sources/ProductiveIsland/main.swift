@@ -120,12 +120,22 @@ extension AppDelegate {
         if panel.isVisible { panel.orderOut(nil); sender.title = "Show island" } else { panel.orderFrontRegardless(); sender.title = "Hide island" }
     }
     @objc func openSettings() { SettingsWindow.shared.show() }
+
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        let m = NSMenu()
+        m.addItem(withTitle: (panel?.isVisible ?? true) ? "Hide island" : "Show island", action: #selector(toggleIsland), keyEquivalent: "").target = self
+        m.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: "").target = self
+        return m
+    }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        panel?.orderFrontRegardless(); return false      // clicking the Dock icon brings the island back
+    }
 }
 
 let app = NSApplication.shared
 let delegate = MainActor.assumeIsolated { AppDelegate() }
 app.delegate = delegate
-app.setActivationPolicy(.accessory)
+app.setActivationPolicy(Prefs.showInDock ? .regular : .accessory)
 app.run()
 
 extension Notification.Name { static let replayTutorial = Notification.Name("replayTutorial") }
