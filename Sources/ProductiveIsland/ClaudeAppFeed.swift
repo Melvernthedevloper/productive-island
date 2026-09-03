@@ -15,11 +15,12 @@ final class ClaudeAppFeed {
     private(set) var trusted = AXIsProcessTrusted()
     private var streaming = false
     private var promptedOnce = false
-    private var logged = 0
+    private var lastLog = ""
+    private var cachedWindows: [AXUIElement] = []
     private static let logURL = URL(fileURLWithPath: (ClaudeFeed.socketPath as NSString).deletingLastPathComponent + "/chat.log")
     private func log(_ m: String) {
-        guard logged < 40 else { return }   // ponytail: first 40 lines are enough to see what AX exposes
-        logged += 1
+        guard m != lastLog else { return }   // ponytail: only state changes, so the file stays small
+        lastLog = m
         try? (String(data: (try? Data(contentsOf: ClaudeAppFeed.logURL)) ?? Data(), encoding: .utf8)! + "\(Date()) \(m)\n").write(to: ClaudeAppFeed.logURL, atomically: true, encoding: .utf8)
     }
 
@@ -45,14 +46,15 @@ final class ClaudeAppFeed {
         var wins: CFTypeRef?
         AXUIElementCopyAttributeValue(ax, kAXWindowsAttribute as CFString, &wins)
         var now = false, title = "Chat"
-        let list = (wins as? [AXUIElement]) ?? []
-        log("windows: \(list.count) titles: \(list.map { attr($0, kAXTitleAttribute) as? String ?? "?" })")
+        var list = (wins as? [AXUIElement]) ?? []
+        // AX only lists windows on the current Space; a window element seen earlier stays valid, so keep using it.
+        if list.isEmpty { list = cachedWindows.filter { attr($0, kAXRoleAttribute) != nil } } else { cachedWindows = list }
         var found: (AXUIElement, AXUIElement?)? = nil
         for w in list {
             var budget = 4000
             var labels: [String] = []
             collectButtons(w, &labels, 3000)
-            log("buttons(\(labels.count)): \(labels.prefix(25))")
+            log("windows: \(list.count) buttons(\(labels.count)): \(labels.prefix(25))")
             if found == nil { found = permissionButtons(w) }
             if hasStopButton(w, &budget) {
                 now = true
@@ -60,8 +62,10 @@ final class ClaudeAppFeed {
                 break
             }
         }
+        if list.isEmpty { log("windows: 0") }
         if now != streaming {
             streaming = now
+            log("streaming: \(now) title: \(title)")
             state.applyChat(streaming: now, title: title)
         }
         // A permission sheet (MCP tool, file access…) shows Allow/Deny buttons; the island can press them.
