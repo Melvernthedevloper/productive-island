@@ -92,3 +92,26 @@ struct Record: View {
         withAnimation(.easeOut(duration: 0.8)) { angle = rest + 40 }
     }
 }
+
+
+/// Spotify mark drawn in code: green disc, three curved bars. No asset.
+struct SpotifyGlyph: View {
+    var size: CGFloat = 11
+    var body: some View {
+        Canvas { g, sz in
+            let w = sz.width
+            g.fill(Path(ellipseIn: CGRect(x: 0, y: 0, width: w, height: w)), with: .color(Color(red: 0x1E/255, green: 0xD7/255, blue: 0x60/255)))
+            // three arcs, widest at the top, each slightly shorter and thinner
+            for (i, spec) in [(0.24, 0.13, 0.62), (0.44, 0.115, 0.54), (0.63, 0.10, 0.46)].enumerated() {
+                let (y, lw, span) = spec
+                let x0 = w * (0.5 - span / 2), x1 = w * (0.5 + span / 2)
+                var p = Path()
+                p.move(to: CGPoint(x: x0, y: w * (y + 0.06)))
+                p.addQuadCurve(to: CGPoint(x: x1, y: w * (y + 0.06)), control: CGPoint(x: w * 0.5, y: w * (y - 0.08)))
+                g.stroke(p, with: .color(.black), style: StrokeStyle(lineWidth: w * lw, lineCap: .round))
+                _ = i
+            }
+        }
+        .frame(width: size, height: size)
+    }
+}

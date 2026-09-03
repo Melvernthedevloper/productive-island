@@ -278,7 +278,7 @@ struct IslandView: View {
 
     private var tabStrip: some View {
         HStack(spacing: 16) {
-            tabButton(.music) { Record(image: spotify.state.artwork, playing: spotify.state.playing, size: 11) }
+            tabButton(.music) { SpotifyGlyph(size: 12) }
             tabButton(.claude) { Sprite(phase: claude.primary?.phase, size: 11) }
             tabButton(.calendar) { Image(systemName: "calendar").font(.system(size: 10, weight: .bold)) }
         }
