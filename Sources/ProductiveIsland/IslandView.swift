@@ -70,7 +70,7 @@ struct IslandView: View {
     @AppStorage("src.calendar") private var srcCalendar = true
 
     private var card: ClaudeState.Session? { claude.waiting }
-    private var expanded: Bool { hovering || pinned || showFull != nil || card != nil || tutorial != nil }
+    private var expanded: Bool { hovering || pinned || showFull != nil || card != nil || tutorial != nil || showSettings }
     private var width: CGFloat { notch.width + 2 * IslandMetrics.lobe }
     private var height: CGFloat {
         if !expanded { return notch.height }
@@ -160,7 +160,9 @@ struct IslandView: View {
                 try? await Task.sleep(for: .milliseconds(100))
                 if mouseInside() { leftAt = nil; hovering = true; continue }
                 if leftAt == nil { leftAt = Date() }
-                if Date().timeIntervalSince(leftAt!) >= IslandMetrics.linger { hoverTask?.cancel(); hovering = false; leftAt = nil }
+                if Date().timeIntervalSince(leftAt!) >= IslandMetrics.linger {
+                    hoverTask?.cancel(); hovering = false; showSettings = false; showUsage = false; leftAt = nil
+                }
             }
         }
     }
