@@ -13,6 +13,7 @@ enum IslandMetrics {
     static let fullHeight: CGFloat = 260
     static let corner: CGFloat = 18
     static let hoverDelay: Duration = .milliseconds(150)
+    static let linger: TimeInterval = 2          // stays open this long after the cursor leaves
 
     static func panelSize(notch: Notch) -> CGSize {
         CGSize(width: notch.width + 2 * lobe + 40, height: fullHeight + 40)
@@ -112,11 +113,15 @@ struct IslandView: View {
         .onChange(of: spotify.state.name) { _, _ in if expanded && card == nil { tab = .music } }
         .onAppear(perform: installSwipe)
         // ponytail: SwiftUI's onHover misses the exit while the frame is animating, so poll the cursor while open.
+        // The island lingers `linger` seconds after the cursor leaves; coming back inside cancels the close.
         .task(id: expanded) {
             guard expanded else { return }
+            var leftAt: Date?
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(100))
-                if !mouseInside() { hoverTask?.cancel(); hovering = false }
+                if mouseInside() { leftAt = nil; hovering = true; continue }
+                if leftAt == nil { leftAt = Date() }
+                if Date().timeIntervalSince(leftAt!) >= IslandMetrics.linger { hoverTask?.cancel(); hovering = false; leftAt = nil }
             }
         }
     }
@@ -142,10 +147,11 @@ struct IslandView: View {
     }
 
     private func hover(_ on: Bool) {
+        guard on else { return }                 // leaving is handled by the linger poll above
         hoverTask?.cancel()
         hoverTask = Task {
-            if on { try? await Task.sleep(for: IslandMetrics.hoverDelay) }
-            if !Task.isCancelled { hovering = on }
+            try? await Task.sleep(for: IslandMetrics.hoverDelay)
+            if !Task.isCancelled { hovering = true }
         }
     }
 
