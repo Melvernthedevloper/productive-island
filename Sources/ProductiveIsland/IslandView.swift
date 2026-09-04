@@ -855,7 +855,11 @@ struct IslandView: View {
             "com.googlecode.iterm2", "com.mitchellh.ghostty", "dev.warp.Warp-Stable", "net.kovidgoyal.kitty",
             "com.apple.Terminal", "com.microsoft.VSCode", "com.todesktop.230313mzl4w4u92" /* Cursor */]
         for id in ids {
-            if let app = NSRunningApplication.runningApplications(withBundleIdentifier: id).first { app.activate(); return }
+            // ponytail: activate() is ignored when we're not the active app (macOS 14+); openApplication brings a window even across Spaces.
+            if let url = NSRunningApplication.runningApplications(withBundleIdentifier: id).first?.bundleURL {
+                let cfg = NSWorkspace.OpenConfiguration(); cfg.activates = true
+                NSWorkspace.shared.openApplication(at: url, configuration: cfg); return
+            }
         }
     }
 }
