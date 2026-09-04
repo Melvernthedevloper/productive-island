@@ -131,6 +131,7 @@ struct IslandView: View {
             .animation(.spring(response: 0.45, dampingFraction: 0.78), value: size)
             .animation(.spring(response: 0.45, dampingFraction: 0.78), value: width)
             .onHover(perform: hover)
+            .onTapGesture { if !expanded { hoverTask?.cancel(); hovering = true } }   // a click opens at once, no hover delay
             .contextMenu {
                 Button("Settings…") { SettingsWindow.shared.show() }
                 Button("Quit Productive Island") { NSApp.terminate(nil) }
