@@ -192,6 +192,11 @@ struct IslandView: View {
         if let f = showFull, !claude.sessions.contains(where: { $0.id == f }) { showFull = nil }
     }
 
+    /// Force-close, whatever is holding the island open.
+    private func collapse() {
+        hoverTask?.cancel(); hovering = false; pinned = false; showFull = nil; showSettings = false; showUsage = false
+    }
+
     private func mouseInside() -> Bool {
         let m = NSEvent.mouseLocation
         let f = notch.screen.frame
@@ -418,6 +423,8 @@ struct IslandView: View {
                     .help(soundOn ? "Sounds on" : "Sounds off")
                 IconButton("gearshape.fill", size: 10, hit: 22) { showSettings = true }
                     .foregroundStyle(Palette.dim).help("Settings")
+                IconButton("xmark", size: 10, hit: 22) { collapse() }
+                    .foregroundStyle(Palette.dim).help("Close")
             }
             .padding(.trailing, 10)
         }
