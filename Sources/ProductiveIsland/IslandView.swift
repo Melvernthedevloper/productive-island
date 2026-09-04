@@ -208,7 +208,7 @@ struct IslandView: View {
 
     private func open(_ t: String, for d: Duration) {
         tab = tabs.contains(t) ? t : (tabs.first ?? Tab.claude); pinned = true
-        Task { try? await Task.sleep(for: d); if showFull == nil { pinned = false } }
+        Task { try? await Task.sleep(for: d); pinned = false }   // showFull keeps it open on its own
     }
 
     /// ⏎ allows, ⎋ denies while a permission card is up. The panel takes key focus only then.
